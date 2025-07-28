@@ -1,0 +1,279 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String?  @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  employee Employee?
+
+  @@map("users")
+}
+
+model Employee {
+  id                    String   @id @default(cuid())
+  userId                String?  @unique @map("user_id")
+  name                  String
+  phone                 String?
+  position              String?
+  division              String?
+  role                  Role     @default(TECHNICIAN)
+  hireDate              DateTime @map("hire_date")
+  photoUrl              String?  @map("photo_url")
+  isActive              Boolean  @default(true) @map("is_active")
+  canHandleTickets      Boolean  @default(false) @map("can_handle_tickets")
+  handlingStatus        HandlingStatus @default(AVAILABLE) @map("handling_status")
+  maxConcurrentTickets  Int      @default(5) @map("max_concurrent_tickets")
+  currentTicketCount    Int      @default(0) @map("current_ticket_count")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user                  User?    @relation(fields: [userId], references: [id])
+  assignedTickets       Ticket[] @relation("AssignedTickets")
+  ticketNotes           TicketNote[]
+  ticketStatusChanges   TicketStatusHistory[]
+  performanceMetrics    EmployeePerformance?
+
+  @@map("employees")
+}
+
+model Package {
+  id          String   @id @default(cuid())
+  name        String
+  speed       String
+  price       Decimal  @db.Decimal(10, 2)
+  duration    Duration
+  description String?
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  customers   Customer[]
+
+  @@map("packages")
+}
+
+model Customer {
+  id        String         @id @default(cuid())
+  name      String
+  email     String?
+  phone     String?
+  address   String?
+  location  String?
+  status    CustomerStatus @default(ACTIVE)
+  packageId String?        @map("package_id")
+  createdAt DateTime       @default(now()) @map("created_at")
+  updatedAt DateTime       @updatedAt @map("updated_at")
+
+  // Relations
+  package   Package? @relation(fields: [packageId], references: [id])
+  tickets   Ticket[]
+  payments  Payment[]
+  feedback  TicketFeedback[]
+
+  @@map("customers")
+}
+
+model Ticket {
+  id           String         @id @default(cuid())
+  title        String
+  description  String
+  status       TicketStatus   @default(OPEN)
+  priority     TicketPriority @default(MEDIUM)
+  category     TicketCategory @default(OTHERS)
+  customerId   String         @map("customer_id")
+  assignedToId String?        @map("assigned_to_id")
+  createdAt    DateTime       @default(now()) @map("created_at")
+  completedAt  DateTime?      @map("completed_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+
+  // Relations
+  customer      Customer              @relation(fields: [customerId], references: [id])
+  assignedTo    Employee?             @relation("AssignedTickets", fields: [assignedToId], references: [id])
+  notes         TicketNote[]
+  statusHistory TicketStatusHistory[]
+  feedback      TicketFeedback?
+
+  @@map("tickets")
+}
+
+model TicketNote {
+  id         String   @id @default(cuid())
+  ticketId   String   @map("ticket_id")
+  employeeId String   @map("employee_id")
+  note       String
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relations
+  ticket   Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@map("ticket_notes")
+}
+
+model TicketStatusHistory {
+  id         String   @id @default(cuid())
+  ticketId   String   @map("ticket_id")
+  fromStatus String?  @map("from_status")
+  toStatus   String   @map("to_status")
+  changedBy  String   @map("changed_by")
+  changedAt  DateTime @default(now()) @map("changed_at")
+  reason     String?
+
+  // Relations
+  ticket   Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [changedBy], references: [id])
+
+  @@map("ticket_status_history")
+}
+
+model TicketFeedback {
+  id         String   @id @default(cuid())
+  ticketId   String   @unique @map("ticket_id")
+  customerId String   @map("customer_id")
+  rating     Int      @db.SmallInt
+  comment    String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relations
+  ticket   Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@map("ticket_feedback")
+}
+
+model Payment {
+  id          String        @id @default(cuid())
+  customerId  String        @map("customer_id")
+  amount      Decimal       @db.Decimal(10, 2)
+  paymentDate DateTime      @map("payment_date")
+  status      PaymentStatus @default(PENDING)
+  createdAt   DateTime      @default(now()) @map("created_at")
+
+  // Relations
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@map("payments")
+}
+
+model EmployeePerformance {
+  id                       String   @id @default(cuid())
+  employeeId               String   @unique @map("employee_id")
+  totalTicketsResolved     Int      @default(0) @map("total_tickets_resolved")
+  averageResolutionTime    Decimal  @default(0) @db.Decimal(5, 2) @map("average_resolution_time")
+  customerRating           Decimal  @default(0) @db.Decimal(3, 2) @map("customer_rating")
+  ticketsResolvedThisMonth Int      @default(0) @map("tickets_resolved_this_month")
+  lastUpdated              DateTime @default(now()) @map("last_updated")
+
+  // Relations
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@map("employee_performance")
+}
+
+model Notification {
+  id            String             @id @default(cuid())
+  type          NotificationType
+  recipientId   String             @map("recipient_id")
+  recipientType RecipientType      @map("recipient_type")
+  title         String
+  message       String
+  channel       NotificationChannel @default(IN_APP)
+  status        NotificationStatus @default(PENDING)
+  createdAt     DateTime           @default(now()) @map("created_at")
+  sentAt        DateTime?          @map("sent_at")
+
+  @@map("notifications")
+}
+
+// Enums
+enum Role {
+  ADMIN
+  TECHNICIAN
+  MARKETING
+  HR
+}
+
+enum HandlingStatus {
+  AVAILABLE
+  BUSY
+  OFFLINE
+}
+
+enum Duration {
+  MONTHLY
+  YEARLY
+}
+
+enum CustomerStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  PENDING
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TicketCategory {
+  NETWORK_ISSUES
+  EQUIPMENT_DAMAGE
+  INSTALLATION
+  OTHERS
+}
+
+enum PaymentStatus {
+  PAID
+  PENDING
+  OVERDUE
+}
+
+enum NotificationType {
+  TICKET_UPDATE
+  ASSIGNMENT
+  ESCALATION
+  SYSTEM_ALERT
+}
+
+enum RecipientType {
+  CUSTOMER
+  EMPLOYEE
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  IN_APP
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
