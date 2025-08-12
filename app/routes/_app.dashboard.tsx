@@ -1,24 +1,35 @@
 import type { MetaFunction, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { Link } from "@remix-run/react";
+import { Link, useLoaderData } from "@remix-run/react";
 import { requireAuth } from "~/lib/auth.server";
+import { requirePermission } from "~/lib/route-protection.server";
+import { db } from "~/lib/db.server";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
 import { StatsCard, iconVariants } from "~/components/ui/stats-card";
 import { PageContainer } from "~/components/layout/page-container";
 import { PageHeader } from "~/components/layout/page-header";
-import { 
-  Users, 
-  Package, 
-  Ticket, 
-  UserCheck, 
-  BarChart3, 
+import { DataGrid, DataCard } from "~/components/ui/data-grid";
+import {
+  Users,
+  Package,
+  Ticket,
+  UserCheck,
+  BarChart3,
   Activity,
   Shield,
   Zap,
-  TrendingUp
+  TrendingUp,
+  DollarSign,
+  Clock,
+  AlertTriangle,
+  CheckCircle,
+  Calendar,
+  Star
 } from "lucide-react";
+import { format } from "date-fns";
+import { id } from "date-fns/locale";
 
 export const meta: MetaFunction = () => {
   return [
@@ -28,50 +39,301 @@ export const meta: MetaFunction = () => {
 };
 
 export async function loader({ request }: LoaderFunctionArgs) {
-  await requireAuth(request);
-  return json({});
+  const user = await requireAuth(request);
+  requirePermission(user, 'dashboard', 'read');
+
+  try {
+    // Get all data in parallel for better performance
+    const [customers, tickets, employees, packages, payments, feedback] = await Promise.all([
+      db.customer.findMany({
+        include: {
+          package: true,
+          _count: {
+            select: {
+              tickets: true,
+              payments: true
+            }
+          }
+        }
+      }),
+      db.ticket.findMany({
+        include: {
+          customer: { select: { name: true } },
+          assignedTo: { select: { name: true } }
+        }
+      }),
+      db.employee.findMany({
+        include: {
+          performanceMetrics: true,
+          _count: {
+            select: {
+              assignedTickets: {
+                where: {
+                  status: { in: ['OPEN', 'IN_PROGRESS', 'PENDING'] }
+                }
+              }
+            }
+          }
+        }
+      }),
+      db.package.findMany({
+        include: {
+          _count: { select: { customers: true } }
+        }
+      }),
+      db.payment.findMany({
+        include: { customer: { select: { name: true } } }
+      }),
+      db.ticketFeedback.findMany({
+        include: {
+          customer: { select: { name: true } },
+          ticket: {
+            include: {
+              assignedTo: { select: { name: true } }
+            }
+          }
+        }
+      })
+    ]);
+
+    // Calculate statistics
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - 7);
+
+    // Customer statistics
+    const totalCustomers = customers.length;
+    const activeCustomers = customers.filter(c => c.status === 'ACTIVE').length;
+    const newCustomersThisMonth = customers.filter(c =>
+      new Date(c.createdAt) >= startOfMonth
+    ).length;
+
+    // Ticket statistics
+    const totalTickets = tickets.length;
+    const openTickets = tickets.filter(t => ['OPEN', 'IN_PROGRESS', 'PENDING'].includes(t.status)).length;
+    const resolvedTickets = tickets.filter(t => t.status === 'RESOLVED').length;
+    const closedTickets = tickets.filter(t => t.status === 'CLOSED').length;
+    const urgentTickets = tickets.filter(t => t.priority === 'URGENT' && ['OPEN', 'IN_PROGRESS'].includes(t.status)).length;
+
+    // Employee statistics
+    const totalEmployees = employees.length;
+    const activeEmployees = employees.filter(e => e.isActive).length;
+    const availableTechnicians = employees.filter(e =>
+      e.canHandleTickets && e.handlingStatus === 'AVAILABLE'
+    ).length;
+
+    // Payment statistics
+    const totalRevenue = payments.reduce((sum, p) => sum + p.amount.toNumber(), 0);
+    const monthlyRevenue = payments
+      .filter(p => new Date(p.paymentDate) >= startOfMonth)
+      .reduce((sum, p) => sum + p.amount.toNumber(), 0);
+    const pendingPayments = payments.filter(p => p.status === 'PENDING').length;
+    const overduePayments = payments.filter(p => p.status === 'OVERDUE').length;
+
+    // Package statistics
+    const totalPackages = packages.length;
+    const mostPopularPackage = packages.reduce((prev, current) =>
+      (prev._count.customers > current._count.customers) ? prev : current
+    );
+
+    // Feedback statistics
+    const totalFeedback = feedback.length;
+    const averageRating = totalFeedback > 0
+      ? feedback.reduce((sum, f) => sum + f.rating, 0) / totalFeedback
+      : 0;
+
+    // Recent activities
+    const recentTickets = tickets
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 5);
+
+    const recentCustomers = customers
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 5);
+
+    // Growth trends (last 6 months)
+    const monthlyGrowth = [];
+    for (let i = 5; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const nextDate = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+
+      const monthCustomers = customers.filter(c => {
+        const createdAt = new Date(c.createdAt);
+        return createdAt >= date && createdAt < nextDate;
+      }).length;
+
+      const monthTickets = tickets.filter(t => {
+        const createdAt = new Date(t.createdAt);
+        return createdAt >= date && createdAt < nextDate;
+      }).length;
+
+      const monthRevenue = payments.filter(p => {
+        const paymentDate = new Date(p.paymentDate);
+        return paymentDate >= date && paymentDate < nextDate;
+      }).reduce((sum, p) => sum + p.amount.toNumber(), 0);
+
+      monthlyGrowth.push({
+        month: format(date, 'MMM yyyy', { locale: id }),
+        customers: monthCustomers,
+        tickets: monthTickets,
+        revenue: monthRevenue
+      });
+    }
+
+    // Top performing employees
+    const topEmployees = employees
+      .filter(e => e.performanceMetrics)
+      .sort((a, b) => {
+        const aRating = a.performanceMetrics?.customerRating.toNumber() || 0;
+        const bRating = b.performanceMetrics?.customerRating.toNumber() || 0;
+        return bRating - aRating;
+      })
+      .slice(0, 5);
+
+    return json({
+      user,
+      stats: {
+        customers: {
+          total: totalCustomers,
+          active: activeCustomers,
+          newThisMonth: newCustomersThisMonth
+        },
+        tickets: {
+          total: totalTickets,
+          open: openTickets,
+          resolved: resolvedTickets,
+          closed: closedTickets,
+          urgent: urgentTickets
+        },
+        employees: {
+          total: totalEmployees,
+          active: activeEmployees,
+          availableTechnicians
+        },
+        payments: {
+          totalRevenue,
+          monthlyRevenue,
+          pending: pendingPayments,
+          overdue: overduePayments
+        },
+        packages: {
+          total: totalPackages,
+          mostPopular: mostPopularPackage
+        },
+        feedback: {
+          total: totalFeedback,
+          averageRating
+        }
+      },
+      recentActivities: {
+        tickets: recentTickets,
+        customers: recentCustomers
+      },
+      analytics: {
+        monthlyGrowth,
+        topEmployees
+      }
+    });
+  } catch (error) {
+    console.error("Error loading dashboard data:", error);
+    return json({
+      user,
+      stats: null,
+      recentActivities: null,
+      analytics: null,
+      error: "Failed to load dashboard data"
+    });
+  }
 }
 
 export default function Dashboard() {
+  const data = useLoaderData<typeof loader>();
+  const { user, stats, recentActivities, analytics } = data;
+
+  if ('error' in data && data.error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
+        <PageContainer className="py-8">
+          <div className="text-center">
+            <AlertTriangle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">Failed to Load Dashboard</h2>
+            <p className="text-gray-600">{'error' in data ? data.error : 'Unknown error occurred'}</p>
+          </div>
+        </PageContainer>
+      </div>
+    );
+  }
+
+  if (!stats) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
+        <PageContainer className="py-8">
+          <div className="text-center">
+            <Activity className="h-12 w-12 text-blue-500 mx-auto mb-4 animate-spin" />
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">Loading Dashboard...</h2>
+          </div>
+        </PageContainer>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
       <PageContainer className="py-8">
         <PageHeader
-          title="Selamat Datang di Dashboard"
+          title={`Selamat Datang, ${user.employee?.name || 'User'}`}
           description="Kelola operasional ISP Anda dengan mudah dan efisien"
         />
 
+        {/* Key Performance Indicators */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <StatsCard
             title="Total Pelanggan"
-            value={1234}
+            value={stats.customers.total.toLocaleString()}
             icon={Users}
             iconClassName={iconVariants.green}
-            trend={{ value: "+12% bulan ini", isPositive: true }}
+            trend={{
+              value: `${stats.customers.active} aktif`,
+              isPositive: true
+            }}
+            description={`+${stats.customers.newThisMonth} bulan ini`}
           />
-          
+
           <StatsCard
             title="Tiket Aktif"
-            value={89}
+            value={stats.tickets.open.toLocaleString()}
             icon={Ticket}
-            iconClassName={iconVariants.orange}
-            description="23 prioritas tinggi"
+            iconClassName={stats.tickets.urgent > 0 ? iconVariants.orange : iconVariants.orange}
+            description={`${stats.tickets.urgent} prioritas tinggi`}
+            trend={{
+              value: `${stats.tickets.resolved} diselesaikan`,
+              isPositive: true
+            }}
           />
-          
+
           <StatsCard
-            title="Teknisi Aktif"
-            value={12}
+            title="Teknisi"
+            value={stats.employees.active.toString()}
             icon={UserCheck}
             iconClassName={iconVariants.blue}
-            description="8 tersedia"
+            description={`${stats.employees.availableTechnicians} tersedia`}
+            trend={{
+              value: `${stats.employees.total} total`,
+              isPositive: true
+            }}
           />
-          
+
           <StatsCard
             title="Pendapatan"
-            value="$45.2K"
-            icon={BarChart3}
+            value={`Rp ${(stats.payments.totalRevenue / 1000000).toFixed(1)}M`}
+            icon={DollarSign}
             iconClassName={iconVariants.purple}
-            trend={{ value: "+8% dari target", isPositive: true }}
+            trend={{
+              value: `Rp ${(stats.payments.monthlyRevenue / 1000000).toFixed(1)}M bulan ini`,
+              isPositive: true
+            }}
+            description={`${stats.payments.pending} pending`}
           />
         </div>
 

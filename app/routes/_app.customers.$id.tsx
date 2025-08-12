@@ -4,6 +4,7 @@ import { useLoaderData, Link } from "@remix-run/react";
 import { requireAuth } from "~/lib/auth.server";
 import { requirePermission } from "~/lib/route-protection.server";
 import { PermissionGate } from "~/components/permission-gate";
+import { PaymentList } from "~/components/payments/payment-list";
 import { Button } from "~/components/ui/button";
 import { StatusBadge } from "~/components/ui/status-badge";
 import { PageContainer } from "~/components/layout/page-container";
@@ -263,6 +264,11 @@ export default function CustomerDetail() {
             </CardContent>
           </Card>
         </div>
+      </div>
+
+      {/* Full Payment History */}
+      <div className="mt-8">
+        <PaymentList customerId={customer.id} />
       </div>
 
       {/* Print Styles */}

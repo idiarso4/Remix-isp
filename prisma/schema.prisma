@@ -46,7 +46,7 @@ model Employee {
   assignedTickets       Ticket[] @relation("AssignedTickets")
   ticketNotes           TicketNote[]
   ticketStatusChanges   TicketStatusHistory[]
-  performanceMetrics    EmployeePerformance?
+  performanceMetrics    EmployeePerformanceMetrics?
 
   @@map("employees")
 }
@@ -97,10 +97,12 @@ model Ticket {
   priority     TicketPriority @default(MEDIUM)
   category     TicketCategory @default(OTHERS)
   customerId   String         @map("customer_id")
-  assignedToId String?        @map("assigned_to_id")
-  createdAt    DateTime       @default(now()) @map("created_at")
-  completedAt  DateTime?      @map("completed_at")
-  updatedAt    DateTime       @updatedAt @map("updated_at")
+  assignedToId        String?  @map("assigned_to_id")
+  resolutionNotes     String?  @map("resolution_notes")
+  resolutionTimeHours Decimal? @db.Decimal(8, 2) @map("resolution_time_hours")
+  createdAt           DateTime @default(now()) @map("created_at")
+  completedAt         DateTime? @map("completed_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
 
   // Relations
   customer      Customer              @relation(fields: [customerId], references: [id])
@@ -113,31 +115,31 @@ model Ticket {
 }
 
 model TicketNote {
-  id         String   @id @default(cuid())
-  ticketId   String   @map("ticket_id")
-  employeeId String   @map("employee_id")
-  note       String
-  createdAt  DateTime @default(now()) @map("created_at")
+  id          String   @id @default(cuid())
+  ticketId    String   @map("ticket_id")
+  createdById String   @map("created_by_id")
+  content     String
+  isInternal  Boolean  @default(false) @map("is_internal")
+  createdAt   DateTime @default(now()) @map("created_at")
 
   // Relations
-  ticket   Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  employee Employee @relation(fields: [employeeId], references: [id])
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  createdBy Employee @relation(fields: [createdById], references: [id])
 
   @@map("ticket_notes")
 }
 
 model TicketStatusHistory {
-  id         String   @id @default(cuid())
-  ticketId   String   @map("ticket_id")
-  fromStatus String?  @map("from_status")
-  toStatus   String   @map("to_status")
-  changedBy  String   @map("changed_by")
-  changedAt  DateTime @default(now()) @map("changed_at")
-  reason     String?
+  id          String   @id @default(cuid())
+  ticketId    String   @map("ticket_id")
+  status      String
+  changedById String   @map("changed_by_id")
+  notes       String?
+  timestamp   DateTime @default(now())
 
   // Relations
-  ticket   Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  employee Employee @relation(fields: [changedBy], references: [id])
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  changedBy Employee @relation(fields: [changedById], references: [id])
 
   @@map("ticket_status_history")
 }
@@ -171,32 +173,31 @@ model Payment {
   @@map("payments")
 }
 
-model EmployeePerformance {
-  id                       String   @id @default(cuid())
-  employeeId               String   @unique @map("employee_id")
-  totalTicketsResolved     Int      @default(0) @map("total_tickets_resolved")
-  averageResolutionTime    Decimal  @default(0) @db.Decimal(5, 2) @map("average_resolution_time")
-  customerRating           Decimal  @default(0) @db.Decimal(3, 2) @map("customer_rating")
-  ticketsResolvedThisMonth Int      @default(0) @map("tickets_resolved_this_month")
-  lastUpdated              DateTime @default(now()) @map("last_updated")
+model EmployeePerformanceMetrics {
+  id                    String   @id @default(cuid())
+  employeeId            String   @unique @map("employee_id")
+  totalTicketsResolved  Int      @default(0) @map("total_tickets_resolved")
+  averageResolutionTime Decimal  @default(0) @db.Decimal(8, 2) @map("average_resolution_time")
+  customerRating        Decimal  @default(0) @db.Decimal(3, 2) @map("customer_rating")
+  lastUpdated           DateTime @default(now()) @map("last_updated")
 
   // Relations
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
-  @@map("employee_performance")
+  @@map("employee_performance_metrics")
 }
 
 model Notification {
-  id            String             @id @default(cuid())
+  id            String              @id @default(cuid())
+  userId        String              @map("user_id")
   type          NotificationType
-  recipientId   String             @map("recipient_id")
-  recipientType RecipientType      @map("recipient_type")
   title         String
   message       String
-  channel       NotificationChannel @default(IN_APP)
-  status        NotificationStatus @default(PENDING)
-  createdAt     DateTime           @default(now()) @map("created_at")
-  sentAt        DateTime?          @map("sent_at")
+  relatedId     String?             @map("related_id")
+  relatedType   String?             @map("related_type")
+  isRead        Boolean             @default(false) @map("is_read")
+  createdAt     DateTime            @default(now()) @map("created_at")
+  readAt        DateTime?           @map("read_at")
 
   @@map("notifications")
 }
@@ -259,21 +260,4 @@ enum NotificationType {
   ASSIGNMENT
   ESCALATION
   SYSTEM_ALERT
-}
-
-enum RecipientType {
-  CUSTOMER
-  EMPLOYEE
-}
-
-enum NotificationChannel {
-  EMAIL
-  SMS
-  IN_APP
-}
-
-enum NotificationStatus {
-  PENDING
-  SENT
-  FAILED
 }

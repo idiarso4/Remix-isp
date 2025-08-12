@@ -273,6 +273,15 @@ export default function TicketsIndex() {
             Cetak
           </Button>
 
+          <PermissionGate user={user} resource="tickets" action="read">
+            <Link to="/tickets/workload">
+              <Button variant="outline" className="print:hidden">
+                <Clock className="mr-2 h-4 w-4" />
+                Workload
+              </Button>
+            </Link>
+          </PermissionGate>
+
           <PermissionGate user={user} resource="tickets" action="create">
             <Link to="/tickets/new">
               <Button className="bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 print:hidden">

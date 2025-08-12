@@ -10,6 +10,8 @@ import {
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
 import { Badge } from "~/components/ui/badge";
+import { NotificationCenter } from "~/components/notifications/notification-center";
+import { GlobalSearch } from "~/components/search/global-search";
 import {
   Wifi,
   Users,
@@ -17,6 +19,8 @@ import {
   Ticket,
   UserCheck,
   BarChart3,
+  CreditCard,
+  MessageSquare,
   LogOut,
   Settings,
   User,
@@ -67,6 +71,20 @@ const navigationItems = [
     action: "read" as const,
   },
   {
+    name: "Payments",
+    href: "/payments",
+    icon: CreditCard,
+    resource: "customers",
+    action: "read" as const,
+  },
+  {
+    name: "Feedback",
+    href: "/feedback",
+    icon: MessageSquare,
+    resource: "tickets",
+    action: "read" as const,
+  },
+  {
     name: "Laporan",
     href: "/reports",
     icon: BarChart3,
@@ -112,10 +130,14 @@ export function Navigation({ user }: NavigationProps) {
         return ['MARKETING'].includes(role);
       case 'tickets':
         return ['TECHNICIAN', 'MARKETING'].includes(role);
+      case 'payments':
+        return ['MARKETING', 'HR'].includes(role);
+      case 'feedback':
+        return ['TECHNICIAN', 'MARKETING', 'HR'].includes(role);
       case 'employees':
         return ['HR'].includes(role);
       case 'reports':
-        return ['MARKETING', 'HR', 'TECHNICIAN'].includes(role);
+        return ['ADMIN', 'MARKETING', 'HR'].includes(role);
       default:
         return false;
     }
@@ -156,29 +178,39 @@ export function Navigation({ user }: NavigationProps) {
           </div>
 
           {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center space-x-1">
-            {filteredNavItems.map((item) => {
-              const Icon = item.icon;
-              const active = isActive(item.href);
+          <div className="hidden md:flex items-center space-x-4">
+            <div className="flex items-center space-x-1">
+              {filteredNavItems.map((item) => {
+                const Icon = item.icon;
+                const active = isActive(item.href);
 
-              return (
-                <Link
-                  key={item.name}
-                  to={item.href}
-                  className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${active
-                    ? "bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-lg"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-                    }`}
-                >
-                  <Icon className="h-4 w-4 mr-2" />
-                  {item.name}
-                </Link>
-              );
-            })}
+                return (
+                  <Link
+                    key={item.name}
+                    to={item.href}
+                    className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${active
+                      ? "bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-lg"
+                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                      }`}
+                  >
+                    <Icon className="h-4 w-4 mr-2" />
+                    {item.name}
+                  </Link>
+                );
+              })}
+            </div>
+            
+            {/* Global Search */}
+            <div className="w-64">
+              <GlobalSearch placeholder="Search..." />
+            </div>
           </div>
 
           {/* User Menu */}
           <div className="flex items-center space-x-4">
+            {/* Notifications */}
+            <NotificationCenter />
+            
             {/* Role Badge */}
             <Badge className={`hidden sm:inline-flex ${roleColors[user.employee?.role as keyof typeof roleColors] || roleColors.TECHNICIAN}`}>
               {roleLabels[user.employee?.role as keyof typeof roleLabels] || "User"}

@@ -1,141 +1,243 @@
-import type { LoaderFunction, ActionFunction } from "@remix-run/node";
-import { json, redirect } from "@remix-run/node";
-import { PaymentStatus } from "@prisma/client";
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
+import { json } from "@remix-run/node";
+import { z } from "zod";
 import { db } from "~/lib/db.server";
 import { requireAuth } from "~/lib/auth.server";
 import { requirePermission } from "~/lib/route-protection.server";
 
-export const loader: LoaderFunction = async ({ request }) => {
+const createPaymentSchema = z.object({
+  customerId: z.string().min(1, "Customer is required"),
+  amount: z.coerce.number().positive("Amount must be positive"),
+  paymentDate: z.string().min(1, "Payment date is required"),
+  status: z.enum(['PAID', 'PENDING', 'OVERDUE']).default('PENDING')
+});
+
+const updatePaymentSchema = z.object({
+  id: z.string().min(1, "Payment ID is required"),
+  amount: z.coerce.number().positive("Amount must be positive").optional(),
+  paymentDate: z.string().optional(),
+  status: z.enum(['PAID', 'PENDING', 'OVERDUE']).optional()
+});
+
+export async function loader({ request }: LoaderFunctionArgs) {
   const user = await requireAuth(request);
-  requirePermission(user, "payments", "read");
+  requirePermission(user, 'customers', 'read');
 
   const url = new URL(request.url);
-  const search = url.searchParams.get("search") || "";
+  const customerId = url.searchParams.get("customerId");
   const status = url.searchParams.get("status");
-  const month = url.searchParams.get("month");
+  const search = url.searchParams.get("search") || "";
+  const page = parseInt(url.searchParams.get("page") || "1");
+  const limit = parseInt(url.searchParams.get("limit") || "10");
 
-  const where: any = {};
-  if (search) {
-    where.OR = [
-      { customer: { name: { contains: search, mode: "insensitive" } } },
-      { customer: { email: { contains: search, mode: "insensitive" } } },
-    ];
-  }
-  if (status && status !== "all") {
-    where.status = status.toUpperCase();
-  }
-  if (month) {
-    const startDate = new Date(month + "-01");
-    const endDate = new Date(startDate.getFullYear(), startDate.getMonth() + 1, 0);
-    where.paymentDate = {
-      gte: startDate,
-      lte: endDate
-    };
-  }
+  try {
+    const where: any = {};
+    
+    if (customerId) {
+      where.customerId = customerId;
+    }
+    
+    if (status && status !== "all") {
+      where.status = status.toUpperCase();
+    }
+    
+    if (search) {
+      where.customer = {
+        name: {
+          contains: search,
+          mode: "insensitive"
+        }
+      };
+    }
 
-  const payments = await db.payment.findMany({
-    where,
-    include: {
-      customer: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          package: {
-            select: { name: true, price: true }
+    const [payments, totalCount] = await Promise.all([
+      db.payment.findMany({
+        where,
+        include: {
+          customer: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+              package: {
+                select: {
+                  name: true,
+                  price: true
+                }
+              }
+            }
+          }
+        },
+        orderBy: { paymentDate: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit
+      }),
+      db.payment.count({ where })
+    ]);
+
+    const totalPages = Math.ceil(totalCount / limit);
+
+    return json({
+      payments,
+      pagination: {
+        currentPage: page,
+        totalPages,
+        totalCount,
+        limit
+      }
+    });
+
+  } catch (error) {
+    console.error("Error fetching payments:", error);
+    return json({ error: "Failed to fetch payments" }, { status: 500 });
+  }
+}
+
+export async function action({ request }: ActionFunctionArgs) {
+  const user = await requireAuth(request);
+  const method = request.method;
+
+  try {
+    const formData = await request.formData();
+    const data = Object.fromEntries(formData);
+
+    if (method === "POST") {
+      requirePermission(user, 'customers', 'create');
+      
+      const validation = createPaymentSchema.safeParse(data);
+      if (!validation.success) {
+        return json({ 
+          error: "Invalid data", 
+          errors: validation.error.flatten().fieldErrors 
+        }, { status: 400 });
+      }
+
+      const { customerId, amount, paymentDate, status } = validation.data;
+
+      // Check if customer exists
+      const customer = await db.customer.findUnique({
+        where: { id: customerId }
+      });
+
+      if (!customer) {
+        return json({ error: "Customer not found" }, { status: 404 });
+      }
+
+      const payment = await db.payment.create({
+        data: {
+          customerId,
+          amount,
+          paymentDate: new Date(paymentDate),
+          status
+        },
+        include: {
+          customer: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+              package: {
+                select: {
+                  name: true,
+                  price: true
+                }
+              }
+            }
           }
         }
+      });
+
+      return json({ 
+        success: true, 
+        message: "Payment created successfully",
+        payment 
+      });
+
+    } else if (method === "PUT") {
+      requirePermission(user, 'customers', 'update');
+      
+      const validation = updatePaymentSchema.safeParse(data);
+      if (!validation.success) {
+        return json({ 
+          error: "Invalid data", 
+          errors: validation.error.flatten().fieldErrors 
+        }, { status: 400 });
       }
-    },
-    orderBy: { paymentDate: "desc" },
-  });
 
-  return json({ payments });
-};
+      const { id, ...updateData } = validation.data;
 
-export const action: ActionFunction = async ({ request }) => {
-  const user = await requireAuth(request);
-  const formData = await request.formData();
-  const method = formData.get("_method")?.toString() || request.method;
+      // Check if payment exists
+      const existingPayment = await db.payment.findUnique({
+        where: { id }
+      });
 
-  if (method === "POST") {
-    requirePermission(user, "payments", "create");
-    
-    const customerId = formData.get("customerId")?.toString();
-    const amountString = formData.get("amount")?.toString();
-    const paymentDateString = formData.get("paymentDate")?.toString();
-    const statusString = formData.get("status")?.toString();
+      if (!existingPayment) {
+        return json({ error: "Payment not found" }, { status: 404 });
+      }
 
-    if (!customerId || !amountString || !paymentDateString || !statusString) {
-      return json({ error: "Required fields are missing" }, { status: 400 });
+      const updatedPayment = await db.payment.update({
+        where: { id },
+        data: {
+          ...updateData,
+          paymentDate: updateData.paymentDate ? new Date(updateData.paymentDate) : undefined
+        },
+        include: {
+          customer: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+              package: {
+                select: {
+                  name: true,
+                  price: true
+                }
+              }
+            }
+          }
+        }
+      });
+
+      return json({ 
+        success: true, 
+        message: "Payment updated successfully",
+        payment: updatedPayment 
+      });
+
+    } else if (method === "DELETE") {
+      requirePermission(user, 'customers', 'delete');
+      
+      const paymentId = data.id as string;
+      if (!paymentId) {
+        return json({ error: "Payment ID is required" }, { status: 400 });
+      }
+
+      // Check if payment exists
+      const existingPayment = await db.payment.findUnique({
+        where: { id: paymentId }
+      });
+
+      if (!existingPayment) {
+        return json({ error: "Payment not found" }, { status: 404 });
+      }
+
+      await db.payment.delete({
+        where: { id: paymentId }
+      });
+
+      return json({ 
+        success: true, 
+        message: "Payment deleted successfully" 
+      });
     }
 
-    const amount = parseFloat(amountString);
-    if (isNaN(amount) || amount <= 0) {
-      return json({ error: "Invalid amount" }, { status: 400 });
-    }
+    return json({ error: "Method not allowed" }, { status: 405 });
 
-    const paymentDate = new Date(paymentDateString);
-    const status = statusString as PaymentStatus;
-
-    const payment = await db.payment.create({
-      data: {
-        customerId,
-        amount,
-        paymentDate,
-        status,
-      },
-    });
-
-    return redirect(`/payments/${payment.id}`);
-  } else if (method === "PUT") {
-    requirePermission(user, "payments", "update");
-    
-    const id = formData.get("id")?.toString();
-    if (!id) {
-      return json({ error: "Payment ID is required" }, { status: 400 });
-    }
-
-    const amountString = formData.get("amount")?.toString();
-    const paymentDateString = formData.get("paymentDate")?.toString();
-    const statusString = formData.get("status")?.toString();
-
-    if (!amountString || !paymentDateString || !statusString) {
-      return json({ error: "Required fields are missing" }, { status: 400 });
-    }
-
-    const amount = parseFloat(amountString);
-    if (isNaN(amount) || amount <= 0) {
-      return json({ error: "Invalid amount" }, { status: 400 });
-    }
-
-    const paymentDate = new Date(paymentDateString);
-    const status = statusString as PaymentStatus;
-
-    await db.payment.update({
-      where: { id },
-      data: {
-        amount,
-        paymentDate,
-        status,
-      },
-    });
-
-    return redirect(`/payments/${id}`);
-  } else if (method === "DELETE") {
-    requirePermission(user, "payments", "delete");
-    
-    const id = formData.get("id")?.toString();
-    if (!id) {
-      return json({ error: "Payment ID is required" }, { status: 400 });
-    }
-
-    await db.payment.delete({
-      where: { id },
-    });
-
-    return redirect("/payments");
+  } catch (error) {
+    console.error("Error managing payment:", error);
+    return json({ error: "Failed to manage payment" }, { status: 500 });
   }
-
-  return json({ error: "Unsupported method" }, { status: 405 });
-};
+}

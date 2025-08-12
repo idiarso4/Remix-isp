@@ -1,6 +1,7 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { useLoaderData, Link } from "@remix-run/react";
+import { useState } from "react";
 import { requireAuth } from "~/lib/auth.server";
 import { requirePermission } from "~/lib/route-protection.server";
 import { PermissionGate } from "~/components/permission-gate";
@@ -9,7 +10,10 @@ import { Badge } from "~/components/ui/badge";
 import { PageContainer } from "~/components/layout/page-container";
 import { PageHeader } from "~/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
-import { ArrowLeft, Edit, User, Calendar, Clock, AlertCircle, CheckCircle, MessageSquare, Printer } from "lucide-react";
+import { TicketAssignment } from "~/components/tickets/ticket-assignment";
+import { TicketNotes } from "~/components/tickets/ticket-notes";
+import { TicketStatusHistory } from "~/components/tickets/ticket-status-history";
+import { ArrowLeft, Edit, User, Calendar, Clock, AlertCircle, CheckCircle, MessageSquare, Printer, UserPlus, Settings } from "lucide-react";
 import { db } from "~/lib/db.server";
 import { format } from "date-fns";
 import { id } from "date-fns/locale";
@@ -43,44 +47,78 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
           id: true,
           name: true,
           position: true,
-          phone: true
+          phone: true,
+          role: true
         }
       },
-      notes: {
-        include: {
-          employee: {
-            select: { name: true }
-          }
-        },
-        orderBy: { createdAt: "desc" }
-      },
-      statusHistory: {
-        include: {
-          employee: {
-            select: { name: true }
-          }
-        },
-        orderBy: { changedAt: "desc" }
-      },
       feedback: {
-        include: {
-          customer: {
-            select: { name: true }
-          }
+        select: {
+          rating: true,
+          comment: true,
+          createdAt: true
         }
       }
     }
   });
 
+  // Get available technicians for assignment
+  const technicians = await db.employee.findMany({
+    where: {
+      canHandleTickets: true,
+      isActive: true
+    },
+    select: {
+      id: true,
+      name: true,
+      role: true,
+      handlingStatus: true,
+      maxConcurrentTickets: true
+    },
+    orderBy: { name: 'asc' }
+  });
+
+  // Get current active ticket counts for each technician
+  const techniciansWithCounts = await Promise.all(
+    technicians.map(async (tech) => {
+      const currentActiveTickets = await db.ticket.count({
+        where: {
+          assignedToId: tech.id,
+          status: { in: ['OPEN', 'IN_PROGRESS', 'PENDING'] }
+        }
+      });
+      
+      return {
+        ...tech,
+        currentActiveTickets
+      };
+    })
+  );
+
+  // Get available employees for assignment
+  const employees = await Promise.all(
+    techniciansWithCounts.map(async (tech) => ({
+      ...tech,
+      currentTicketCount: tech.currentActiveTickets,
+      canHandleTickets: true,
+      isActive: true
+    }))
+  );
+
   if (!ticket) {
     throw new Response("Ticket not found", { status: 404 });
   }
 
-  return json({ user, ticket });
+  return json({ user, ticket, employees });
 }
 
 export default function TicketDetail() {
-  const { user, ticket } = useLoaderData<typeof loader>();
+  const { user, ticket, employees } = useLoaderData<typeof loader>();
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const handleRefresh = () => {
+    setRefreshKey(prev => prev + 1);
+    window.location.reload();
+  };
 
   // Priority badge variant
   const getPriorityVariant = (priority: string) => {
@@ -127,14 +165,26 @@ export default function TicketDetail() {
             <Printer className="mr-2 h-4 w-4" />
             Cetak
           </Button>
-          
+
+          <PermissionGate user={user} resource="tickets" action="update">
+            <TicketAssignment
+              ticketId={ticket.id}
+              currentAssignee={ticket.assignedTo ? {
+                id: ticket.assignedTo.id,
+                name: ticket.assignedTo.name
+              } : null}
+              employees={employees}
+              onAssignmentChange={handleRefresh}
+            />
+          </PermissionGate>
+
           <Button variant="outline" asChild>
             <Link to="/tickets">
               <ArrowLeft className="mr-2 h-4 w-4" />
               Kembali
             </Link>
           </Button>
-          
+
           <PermissionGate user={user} resource="tickets" action="update">
             <Button asChild>
               <Link to={`/tickets/${ticket.id}/edit`}>
@@ -180,12 +230,12 @@ export default function TicketDetail() {
                   </p>
                 </div>
               </div>
-              
+
               <div>
                 <label className="text-sm font-medium text-gray-500">Deskripsi</label>
                 <p className="mt-1 text-gray-700 whitespace-pre-wrap">{ticket.description}</p>
               </div>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium text-gray-500">Dibuat</label>
@@ -208,64 +258,18 @@ export default function TicketDetail() {
           </Card>
 
           {/* Notes */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <MessageSquare className="mr-2 h-5 w-5" />
-                Catatan Penanganan ({ticket.notes.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {ticket.notes.length > 0 ? (
-                <div className="space-y-4">
-                  {ticket.notes.map((note) => (
-                    <div key={note.id} className="border-l-4 border-blue-200 pl-4 py-2">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="font-medium text-sm">{note.employee.name}</span>
-                        <span className="text-xs text-gray-500">
-                          {format(new Date(note.createdAt), "dd MMM yyyy, HH:mm", { locale: id })}
-                        </span>
-                      </div>
-                      <p className="text-gray-700 whitespace-pre-wrap">{note.note}</p>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-gray-500 text-center py-4">Belum ada catatan</p>
-              )}
-            </CardContent>
-          </Card>
+          <TicketNotes
+            key={`notes-${refreshKey}`}
+            ticketId={ticket.id}
+            currentUserId={user.employee!.id}
+            currentUserRole={user.employee!.role}
+          />
 
           {/* Status History */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Riwayat Status</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {ticket.statusHistory.length > 0 ? (
-                <div className="space-y-3">
-                  {ticket.statusHistory.map((history) => (
-                    <div key={history.id} className="flex items-center justify-between p-3 border rounded-lg">
-                      <div>
-                        <p className="font-medium">
-                          {history.fromStatus ? `${history.fromStatus} → ${history.toStatus}` : history.toStatus}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          oleh {history.employee.name}
-                          {history.reason && ` • ${history.reason}`}
-                        </p>
-                      </div>
-                      <span className="text-xs text-gray-500">
-                        {format(new Date(history.changedAt), "dd MMM yyyy, HH:mm", { locale: id })}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-gray-500 text-center py-4">Belum ada riwayat</p>
-              )}
-            </CardContent>
-          </Card>
+          <TicketStatusHistory
+            key={`history-${refreshKey}`}
+            ticketId={ticket.id}
+          />
         </div>
 
         {/* Sidebar */}
@@ -287,28 +291,28 @@ export default function TicketDetail() {
                   </Link>
                 </Button>
               </div>
-              
+
               {ticket.customer.email && (
                 <div>
                   <label className="text-sm font-medium text-gray-500">Email</label>
                   <p>{ticket.customer.email}</p>
                 </div>
               )}
-              
+
               {ticket.customer.phone && (
                 <div>
                   <label className="text-sm font-medium text-gray-500">Telepon</label>
                   <p>{ticket.customer.phone}</p>
                 </div>
               )}
-              
+
               {ticket.customer.location && (
                 <div>
                   <label className="text-sm font-medium text-gray-500">Lokasi</label>
                   <p>{ticket.customer.location}</p>
                 </div>
               )}
-              
+
               {ticket.customer.package && (
                 <div>
                   <label className="text-sm font-medium text-gray-500">Paket</label>
@@ -321,7 +325,21 @@ export default function TicketDetail() {
           {/* Assigned Technician */}
           <Card>
             <CardHeader>
-              <CardTitle>Teknisi yang Ditugaskan</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>Teknisi yang Ditugaskan</CardTitle>
+                <PermissionGate user={user} resource="tickets" action="update">
+                  <TicketAssignment
+                    ticketId={ticket.id}
+                    currentAssignee={ticket.assignedTo ? {
+                      id: ticket.assignedTo.id,
+                      name: ticket.assignedTo.name
+                    } : null}
+                    employees={employees}
+                    onAssignmentChange={handleRefresh}
+                    className="inline-block"
+                  />
+                </PermissionGate>
+              </div>
             </CardHeader>
             <CardContent>
               {ticket.assignedTo ? (
@@ -330,16 +348,21 @@ export default function TicketDetail() {
                     <p className="font-semibold text-lg">{ticket.assignedTo.name}</p>
                     <p className="text-sm text-gray-500">{ticket.assignedTo.position}</p>
                   </div>
-                  
+
                   {ticket.assignedTo.phone && (
                     <div>
                       <label className="text-sm font-medium text-gray-500">Telepon</label>
                       <p>{ticket.assignedTo.phone}</p>
                     </div>
                   )}
+
+
                 </div>
               ) : (
-                <p className="text-gray-500">Belum ditugaskan</p>
+                <div className="space-y-3">
+                  <p className="text-gray-500">Belum ditugaskan</p>
+
+                </div>
               )}
             </CardContent>
           </Card>
@@ -362,14 +385,14 @@ export default function TicketDetail() {
                     <span className="ml-2 text-sm text-gray-600">({ticket.feedback.rating}/5)</span>
                   </div>
                 </div>
-                
+
                 {ticket.feedback.comment && (
                   <div>
                     <label className="text-sm font-medium text-gray-500">Komentar</label>
                     <p className="text-gray-700">{ticket.feedback.comment}</p>
                   </div>
                 )}
-                
+
                 <div>
                   <label className="text-sm font-medium text-gray-500">Diberikan</label>
                   <p className="text-sm">
@@ -382,8 +405,10 @@ export default function TicketDetail() {
         </div>
       </div>
 
+
+
       {/* Print Styles */}
-      <style jsx>{`
+      <style>{`
         @media print {
           .print\\:hidden {
             display: none !important;
