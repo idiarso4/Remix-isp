@@ -106,7 +106,7 @@ export const action: ActionFunction = async ({ request }) => {
         ticketId,
         fromStatus: currentTicket.assignedToId ? "ASSIGNED" : null,
         toStatus: "ASSIGNED",
-        changedBy: assignedToId,
+        changedById: assignedToId,
         reason
       }
     });

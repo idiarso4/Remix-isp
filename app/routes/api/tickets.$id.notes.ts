@@ -80,7 +80,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       const newNote = await db.ticketNote.create({
         data: {
           ticketId,
-          employeeId: user.employee!.id,
+          createdById: user.employee!.id,
           note
         },
         include: {
@@ -134,7 +134,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       }
 
       // Only allow deletion by the note author or admin
-      if (note.employeeId !== user.employee!.id && user.employee!.role !== 'ADMIN') {
+      if (note.createdById !== user.employee!.id && user.employee!.role !== 'ADMIN') {
         return json({ error: "Not authorized to delete this note" }, { status: 403 });
       }
 

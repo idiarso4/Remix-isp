@@ -108,7 +108,7 @@ export const action: ActionFunction = async ({ request }) => {
     });
 
     // Create performance metrics record
-    await db.employeePerformance.create({
+    await db.employeePerformanceMetrics.create({
       data: {
         employeeId: employee.id,
       }
@@ -195,16 +195,16 @@ export const action: ActionFunction = async ({ request }) => {
     }
 
     // Delete related records first
-    await db.employeePerformance.deleteMany({
+    await db.employeePerformanceMetrics.deleteMany({
       where: { employeeId: id }
     });
 
     await db.ticketNote.deleteMany({
-      where: { employeeId: id }
+      where: { createdById: id }
     });
 
     await db.ticketStatusHistory.deleteMany({
-      where: { changedBy: id }
+      where: { changedById: id }
     });
 
     // Delete employee

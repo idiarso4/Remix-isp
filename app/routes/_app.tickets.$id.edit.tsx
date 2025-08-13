@@ -244,7 +244,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
 export default function EditTicket() {
   const { user, ticket, technicians } = useLoaderData<typeof loader>();
-  const actionData = useActionData<typeof action>();
+  const actionData = useActionData<{ errors?: Record<string, string>; success?: string; error?: string }>();
   const navigation = useNavigation();
   
   const isSubmitting = navigation.state === "submitting";

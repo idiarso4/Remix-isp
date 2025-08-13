@@ -12,6 +12,7 @@ import {
 import { Badge } from "~/components/ui/badge";
 import { NotificationCenter } from "~/components/notifications/notification-center";
 import { GlobalSearch } from "~/components/search/global-search";
+import { LogoutDialog } from "~/components/auth/logout-dialog";
 import {
   Wifi,
   Users,
@@ -258,13 +259,16 @@ export function Navigation({ user }: NavigationProps) {
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>
-                  <Form method="post" action="/auth/logout" className="w-full">
-                    <button type="submit" className="flex items-center w-full text-red-600">
-                      <LogOut className="mr-2 h-4 w-4" />
-                      <span>Keluar</span>
-                    </button>
-                  </Form>
+                <DropdownMenuItem asChild>
+                  <LogoutDialog 
+                    user={user}
+                    trigger={
+                      <button className="flex items-center w-full text-red-600 px-2 py-1.5 text-sm rounded hover:bg-red-50">
+                        <LogOut className="mr-2 h-4 w-4" />
+                        <span>Keluar</span>
+                      </button>
+                    }
+                  />
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

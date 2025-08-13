@@ -7,7 +7,7 @@ import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Alert, AlertDescription } from "~/components/ui/alert";
-import { Wifi, Mail, Lock, LogIn, AlertCircle } from "lucide-react";
+import { Wifi, Mail, Lock, LogIn, AlertCircle, Shield } from "lucide-react";
 
 export const meta: MetaFunction = () => {
   return [
@@ -37,7 +37,7 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export default function Login() {
-  const actionData = useActionData<typeof action>();
+  const actionData = useActionData<{ error?: string }>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
 
@@ -140,24 +140,31 @@ export default function Login() {
             </Form>
 
             {/* Demo Credentials */}
-            <div className="mt-8 p-4 bg-gray-50 rounded-lg border border-gray-200">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">Demo Credentials:</h3>
-              <div className="space-y-2 text-xs text-gray-600">
-                <div className="flex justify-between">
-                  <span className="font-medium">Admin:</span>
-                  <span>admin@isp.com / admin123</span>
+            <div className="mt-8 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
+                <Shield className="h-4 w-4 mr-2 text-blue-600" />
+                Demo Credentials:
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="p-2 bg-white rounded border">
+                  <div className="font-medium text-red-600">Admin</div>
+                  <div className="text-gray-600">admin@isp.com</div>
+                  <div className="text-gray-500">admin123</div>
                 </div>
-                <div className="flex justify-between">
-                  <span className="font-medium">Teknisi:</span>
-                  <span>tech1@isp.com / tech123</span>
+                <div className="p-2 bg-white rounded border">
+                  <div className="font-medium text-blue-600">Teknisi</div>
+                  <div className="text-gray-600">tech1@isp.com</div>
+                  <div className="text-gray-500">tech123</div>
                 </div>
-                <div className="flex justify-between">
-                  <span className="font-medium">Marketing:</span>
-                  <span>marketing@isp.com / marketing123</span>
+                <div className="p-2 bg-white rounded border">
+                  <div className="font-medium text-green-600">Marketing</div>
+                  <div className="text-gray-600">marketing@isp.com</div>
+                  <div className="text-gray-500">marketing123</div>
                 </div>
-                <div className="flex justify-between">
-                  <span className="font-medium">HR:</span>
-                  <span>hr@isp.com / hr123</span>
+                <div className="p-2 bg-white rounded border">
+                  <div className="font-medium text-purple-600">HR</div>
+                  <div className="text-gray-600">hr@isp.com</div>
+                  <div className="text-gray-500">hr123</div>
                 </div>
               </div>
             </div>

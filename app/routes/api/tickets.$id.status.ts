@@ -102,7 +102,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
         await tx.ticketNote.create({
           data: {
             ticketId,
-            employeeId: user.employee!.id,
+            createdById: user.employee!.id,
             note: `Resolution: ${resolutionNote}`
           }
         });
@@ -112,7 +112,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       await tx.ticketNote.create({
         data: {
           ticketId,
-          employeeId: user.employee!.id,
+          createdById: user.employee!.id,
           note: `Status changed from ${ticket.status} to ${status}${reason ? `. Reason: ${reason}` : ''}`
         }
       });
@@ -130,7 +130,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
         // Update performance metrics
         if (status === 'RESOLVED') {
-          const performance = await tx.employeePerformance.findUnique({
+          const performance = await tx.employeePerformanceMetrics.findUnique({
             where: { employeeId: ticket.assignedToId }
           });
 
@@ -142,7 +142,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
             const newTotal = performance.totalTicketsResolved + 1;
             const newAverage = ((performance.averageResolutionTime.toNumber() * performance.totalTicketsResolved) + resolutionTime) / newTotal;
 
-            await tx.employeePerformance.update({
+            await tx.employeePerformanceMetrics.update({
               where: { employeeId: ticket.assignedToId },
               data: {
                 totalTicketsResolved: newTotal,
@@ -155,7 +155,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
             });
           } else {
             // Create performance record if doesn't exist
-            await tx.employeePerformance.create({
+            await tx.employeePerformanceMetrics.create({
               data: {
                 employeeId: ticket.assignedToId,
                 totalTicketsResolved: 1,

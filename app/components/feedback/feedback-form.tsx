@@ -125,17 +125,15 @@ export function FeedbackForm({
         </div>
 
         {/* Error Message */}
-        {feedbackFetcher.data &&
-          typeof feedbackFetcher.data === 'object' &&
-          feedbackFetcher.data !== null &&
-          'error' in feedbackFetcher.data &&
-          feedbackFetcher.data.error && (
-            <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">
-              {typeof feedbackFetcher.data.error === 'string'
-                ? feedbackFetcher.data.error
-                : 'An error occurred'}
-            </div>
-          )}
+        {feedbackFetcher.data && 
+         typeof feedbackFetcher.data === 'object' && 
+         feedbackFetcher.data !== null &&
+         'error' in feedbackFetcher.data && 
+         feedbackFetcher.data.error && (
+          <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">
+            An error occurred while submitting feedback
+          </div>
+        )}
 
         {/* Submit Button */}
         <div className="flex justify-end">

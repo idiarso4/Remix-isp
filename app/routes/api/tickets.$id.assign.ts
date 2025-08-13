@@ -139,7 +139,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       await tx.ticketNote.create({
         data: {
           ticketId,
-          employeeId: user.employee!.id,
+          createdById: user.employee!.id,
           note: `${noteText}${reason ? `. Reason: ${reason}` : ''}`
         }
       });

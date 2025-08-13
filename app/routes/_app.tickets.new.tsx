@@ -118,6 +118,10 @@ export async function action({ request }: ActionFunctionArgs) {
       });
     }
 
+    if (!title || !description || !customerId) {
+      return json({ error: "Missing required fields" }, { status: 400 });
+    }
+
     const ticket = await db.ticket.create({
       data: {
         title: title.trim(),
@@ -134,10 +138,9 @@ export async function action({ request }: ActionFunctionArgs) {
       await db.ticketStatusHistory.create({
         data: {
           ticketId: ticket.id,
-          fromStatus: null,
-          toStatus: "ASSIGNED",
-          changedBy: assignedToId,
-          reason: "Initial assignment"
+          status: "ASSIGNED",
+          changedById: assignedToId,
+          notes: "Initial assignment"
         }
       });
     }
@@ -151,7 +154,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
 export default function NewTicket() {
   const { user, customers, technicians } = useLoaderData<typeof loader>();
-  const actionData = useActionData<typeof action>();
+  const actionData = useActionData<{ errors?: Record<string, string>; success?: string; error?: string }>();
   const navigation = useNavigation();
   
   const isSubmitting = navigation.state === "submitting";

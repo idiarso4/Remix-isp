@@ -134,7 +134,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
       // Update employee performance metrics if ticket was assigned
       if (ticket.assignedToId) {
-        const performance = await tx.employeePerformance.findUnique({
+        const performance = await tx.employeePerformanceMetrics.findUnique({
           where: { employeeId: ticket.assignedToId }
         });
 
@@ -150,7 +150,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
           const newAverage = ((performance.customerRating.toNumber() * (totalFeedbacks - 1)) + rating) / totalFeedbacks;
 
-          await tx.employeePerformance.update({
+          await tx.employeePerformanceMetrics.update({
             where: { employeeId: ticket.assignedToId },
             data: {
               customerRating: newAverage,
@@ -159,7 +159,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
           });
         } else {
           // Create performance record if doesn't exist
-          await tx.employeePerformance.create({
+          await tx.employeePerformanceMetrics.create({
             data: {
               employeeId: ticket.assignedToId,
               customerRating: rating
@@ -172,7 +172,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       await tx.ticketNote.create({
         data: {
           ticketId,
-          employeeId: user.employee!.id,
+          createdById: user.employee!.id,
           note: `Customer feedback received: ${rating}/5 stars${comment ? `. Comment: ${comment}` : ''}`
         }
       });

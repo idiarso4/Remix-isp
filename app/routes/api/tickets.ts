@@ -111,10 +111,9 @@ export const action: ActionFunction = async ({ request }) => {
       await db.ticketStatusHistory.create({
         data: {
           ticketId: ticket.id,
-          fromStatus: null,
-          toStatus: "ASSIGNED",
-          changedBy: assignedToId,
-          reason: "Initial assignment"
+          status: "ASSIGNED",
+          changedById: assignedToId,
+          notes: "Initial assignment"
         }
       });
     }
@@ -219,10 +218,9 @@ export const action: ActionFunction = async ({ request }) => {
       await db.ticketStatusHistory.create({
         data: {
           ticketId: id,
-          fromStatus: currentTicket.status,
-          toStatus: status,
-          changedBy: assignedToId,
-          reason: "Status updated"
+          status: status,
+          changedById: assignedToId,
+          notes: "Status updated"
         }
       });
     }
