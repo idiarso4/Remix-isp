@@ -114,8 +114,8 @@ export function PaymentForm({
           <FormField
             label="Customer"
             required
-            error={paymentFetcher.data && typeof paymentFetcher.data === 'object' && 'errors' in paymentFetcher.data 
-              ? String(paymentFetcher.data.errors?.customerId || '') 
+            error={paymentFetcher.data && typeof paymentFetcher.data === 'object' && 'errors' in paymentFetcher.data && paymentFetcher.data.errors && typeof paymentFetcher.data.errors === 'object' && 'customerId' in paymentFetcher.data.errors
+              ? String(paymentFetcher.data.errors.customerId || '') 
               : undefined}
           >
             <select
@@ -152,8 +152,8 @@ export function PaymentForm({
           <FormField
             label="Amount"
             required
-            error={paymentFetcher.data && typeof paymentFetcher.data === 'object' && 'errors' in paymentFetcher.data 
-              ? String(paymentFetcher.data.errors?.amount || '') 
+            error={paymentFetcher.data && typeof paymentFetcher.data === 'object' && 'errors' in paymentFetcher.data && paymentFetcher.data.errors && typeof paymentFetcher.data.errors === 'object' && 'amount' in paymentFetcher.data.errors
+              ? String(paymentFetcher.data.errors.amount || '') 
               : undefined}
           >
             <div className="relative">
@@ -182,8 +182,8 @@ export function PaymentForm({
           <FormField
             label="Payment Date"
             required
-            error={paymentFetcher.data && typeof paymentFetcher.data === 'object' && 'errors' in paymentFetcher.data 
-              ? String(paymentFetcher.data.errors?.paymentDate || '') 
+            error={paymentFetcher.data && typeof paymentFetcher.data === 'object' && 'errors' in paymentFetcher.data && paymentFetcher.data.errors && typeof paymentFetcher.data.errors === 'object' && 'paymentDate' in paymentFetcher.data.errors
+              ? String(paymentFetcher.data.errors.paymentDate || '') 
               : undefined}
           >
             <div className="relative">
@@ -204,8 +204,8 @@ export function PaymentForm({
           <FormField
             label="Status"
             required
-            error={paymentFetcher.data && typeof paymentFetcher.data === 'object' && 'errors' in paymentFetcher.data 
-              ? String(paymentFetcher.data.errors?.status || '') 
+            error={paymentFetcher.data && typeof paymentFetcher.data === 'object' && 'errors' in paymentFetcher.data && paymentFetcher.data.errors && typeof paymentFetcher.data.errors === 'object' && 'status' in paymentFetcher.data.errors
+              ? String(paymentFetcher.data.errors.status || '') 
               : undefined}
           >
             <select

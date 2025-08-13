@@ -129,11 +129,11 @@ export function FeedbackForm({
          typeof feedbackFetcher.data === 'object' && 
          feedbackFetcher.data !== null &&
          'error' in feedbackFetcher.data && 
-         feedbackFetcher.data.error && (
+         feedbackFetcher.data.error ? (
           <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">
             An error occurred while submitting feedback
           </div>
-        )}
+        ) : null}
 
         {/* Submit Button */}
         <div className="flex justify-end">

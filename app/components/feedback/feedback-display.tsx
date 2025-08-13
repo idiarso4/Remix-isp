@@ -13,12 +13,12 @@ import { cn } from "~/lib/utils";
 interface Feedback {
   id: string;
   rating: number;
-  comment?: string;
+  comment: string | null;
   createdAt: string;
   customer: {
     id: string;
     name: string;
-    email?: string;
+    email: string | null;
   };
   ticket?: {
     id: string;

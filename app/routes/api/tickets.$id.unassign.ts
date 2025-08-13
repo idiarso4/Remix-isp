@@ -78,10 +78,9 @@ export async function action({ request, params }: ActionFunctionArgs) {
       await tx.ticketStatusHistory.create({
         data: {
           ticketId,
-          fromStatus: 'ASSIGNED',
-          toStatus: 'OPEN',
-          changedBy: user.employee!.id,
-          reason: reason || `Unassigned from ${ticket.assignedTo!.name}`
+          status: 'OPEN',
+          changedById: user.employee!.id,
+          notes: reason || `Unassigned from ${ticket.assignedTo!.name}`
         }
       });
 
@@ -90,7 +89,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
         data: {
           ticketId,
           createdById: user.employee!.id,
-          note: `Ticket unassigned from ${ticket.assignedTo!.name}${reason ? `. Reason: ${reason}` : ''}`
+          content: `Ticket unassigned from ${ticket.assignedTo!.name}${reason ? `. Reason: ${reason}` : ''}`
         }
       });
 

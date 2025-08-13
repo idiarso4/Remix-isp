@@ -173,7 +173,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
         data: {
           ticketId,
           createdById: user.employee!.id,
-          note: `Customer feedback received: ${rating}/5 stars${comment ? `. Comment: ${comment}` : ''}`
+          content: `Customer feedback received: ${rating}/5 stars${comment ? `. Comment: ${comment}` : ''}`
         }
       });
 

@@ -90,10 +90,9 @@ export async function action({ request, params }: ActionFunctionArgs) {
       await tx.ticketStatusHistory.create({
         data: {
           ticketId,
-          fromStatus: ticket.status,
-          toStatus: status,
-          changedBy: user.employee!.id,
-          reason: reason || `Status changed to ${status}`
+          status: status,
+          changedById: user.employee!.id,
+          notes: reason || `Status changed to ${status}`
         }
       });
 
@@ -103,7 +102,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
           data: {
             ticketId,
             createdById: user.employee!.id,
-            note: `Resolution: ${resolutionNote}`
+            content: `Resolution: ${resolutionNote}`
           }
         });
       }
@@ -113,7 +112,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
         data: {
           ticketId,
           createdById: user.employee!.id,
-          note: `Status changed from ${ticket.status} to ${status}${reason ? `. Reason: ${reason}` : ''}`
+          content: `Status changed from ${ticket.status} to ${status}${reason ? `. Reason: ${reason}` : ''}`
         }
       });
 

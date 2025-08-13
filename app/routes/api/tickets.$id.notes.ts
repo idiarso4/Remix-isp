@@ -81,7 +81,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
         data: {
           ticketId,
           createdById: user.employee!.id,
-          note
+          content: note
         },
         include: {
           employee: {

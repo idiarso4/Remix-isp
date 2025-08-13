@@ -104,10 +104,9 @@ export const action: ActionFunction = async ({ request }) => {
     await db.ticketStatusHistory.create({
       data: {
         ticketId,
-        fromStatus: currentTicket.assignedToId ? "ASSIGNED" : null,
-        toStatus: "ASSIGNED",
+        status: "ASSIGNED",
         changedById: assignedToId,
-        reason
+        notes: reason || "Ticket assigned"
       }
     });
   }

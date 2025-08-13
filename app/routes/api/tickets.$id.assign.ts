@@ -124,10 +124,9 @@ export async function action({ request, params }: ActionFunctionArgs) {
       await tx.ticketStatusHistory.create({
         data: {
           ticketId,
-          fromStatus: ticket.assignedToId ? 'REASSIGNED' : 'UNASSIGNED',
-          toStatus: 'ASSIGNED',
-          changedBy: user.employee!.id,
-          reason: reason || `Assigned to ${technician.name}`
+          status: 'ASSIGNED',
+          changedById: user.employee!.id,
+          notes: reason || `Assigned to ${technician.name}`
         }
       });
 
@@ -140,7 +139,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
         data: {
           ticketId,
           createdById: user.employee!.id,
-          note: `${noteText}${reason ? `. Reason: ${reason}` : ''}`
+          content: `${noteText}${reason ? `. Reason: ${reason}` : ''}`
         }
       });
 

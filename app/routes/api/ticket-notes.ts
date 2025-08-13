@@ -47,11 +47,11 @@ export const action: ActionFunction = async ({ request }) => {
     const ticketNote = await db.ticketNote.create({
       data: {
         ticketId,
-        employeeId,
-        note: note.trim()
+        createdById: employeeId,
+        content: note.trim()
       },
       include: {
-        employee: {
+        createdBy: {
           select: { name: true }
         }
       }
@@ -69,7 +69,7 @@ export const action: ActionFunction = async ({ request }) => {
     const note = await db.ticketNote.findUnique({
       where: { id: noteId },
       include: {
-        employee: {
+        createdBy: {
           select: { userId: true }
         }
       }

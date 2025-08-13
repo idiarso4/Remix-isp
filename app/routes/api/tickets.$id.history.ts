@@ -36,7 +36,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
           }
         }
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { timestamp: 'desc' }
     });
 
     return json({ history });

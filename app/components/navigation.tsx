@@ -259,7 +259,7 @@ export function Navigation({ user }: NavigationProps) {
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
+                <DropdownMenuItem>
                   <LogoutDialog 
                     user={user}
                     trigger={

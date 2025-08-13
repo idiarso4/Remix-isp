@@ -265,16 +265,16 @@ async function main() {
   await prisma.ticketNote.create({
     data: {
       ticketId: ticket1.id,
-      employeeId: tech1.id,
-      note: "Initial diagnosis shows signal strength issues. Scheduled site visit for tomorrow.",
+      createdById: tech1.id,
+      content: "Initial diagnosis shows signal strength issues. Scheduled site visit for tomorrow.",
     },
   });
 
   await prisma.ticketNote.create({
     data: {
       ticketId: ticket2.id,
-      employeeId: tech2.id,
-      note: "Installation scheduled for Friday 2 PM. Customer confirmed availability.",
+      createdById: tech2.id,
+      content: "Installation scheduled for Friday 2 PM. Customer confirmed availability.",
     },
   });
 
@@ -282,41 +282,37 @@ async function main() {
   await prisma.ticketStatusHistory.create({
     data: {
       ticketId: ticket1.id,
-      fromStatus: null,
-      toStatus: "OPEN",
-      changedBy: adminEmployee.id,
-      reason: "Ticket created",
+      status: "OPEN",
+      changedById: adminEmployee.id,
+      notes: "Ticket created",
     },
   });
 
   await prisma.ticketStatusHistory.create({
     data: {
       ticketId: ticket3.id,
-      fromStatus: "IN_PROGRESS",
-      toStatus: "RESOLVED",
-      changedBy: tech1.id,
-      reason: "Equipment replaced successfully",
+      status: "RESOLVED",
+      changedById: tech1.id,
+      notes: "Equipment replaced successfully",
     },
   });
 
   // Create employee performance metrics
-  await prisma.employeePerformance.create({
+  await prisma.employeePerformanceMetrics.create({
     data: {
       employeeId: tech1.id,
       totalTicketsResolved: 15,
       averageResolutionTime: 4.5,
       customerRating: 4.2,
-      ticketsResolvedThisMonth: 8,
     },
   });
 
-  await prisma.employeePerformance.create({
+  await prisma.employeePerformanceMetrics.create({
     data: {
       employeeId: tech2.id,
       totalTicketsResolved: 12,
       averageResolutionTime: 3.8,
       customerRating: 4.5,
-      ticketsResolvedThisMonth: 6,
     },
   });
 
