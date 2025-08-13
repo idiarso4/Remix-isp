@@ -1,22 +1,30 @@
-import type { LoaderFunctionArgs } from "@remix-run/node";
-import { json } from "@remix-run/node";
+import type { LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
+import { json, redirect } from "@remix-run/node";
 import { useLoaderData } from "@remix-run/react";
+import { z } from "zod";
 import { db } from "~/lib/db.server";
 import { FeedbackForm } from "~/components/feedback/feedback-form";
 import { FeedbackDisplay } from "~/components/feedback/feedback-display";
-import { PageContainer } from "~/components/layout/page-container";
-import { Alert, AlertDescription } from "~/components/ui/alert";
-import { CheckCircle, AlertCircle, Wifi } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import { Badge } from "~/components/ui/badge";
+import { 
+  CheckCircle, 
+  MessageSquare,
+  Ticket as TicketIcon
+} from "lucide-react";
+
+const feedbackSchema = z.object({
+  rating: z.coerce.number().min(1, "Rating must be at least 1").max(5, "Rating must be at most 5"),
+  comment: z.string().optional()
+});
 
 export async function loader({ params }: LoaderFunctionArgs) {
   const ticketId = params.ticketId;
-  
   if (!ticketId) {
     throw new Response("Ticket ID is required", { status: 400 });
   }
 
   try {
-    // Get ticket with customer and feedback info
     const ticket = await db.ticket.findUnique({
       where: { id: ticketId },
       include: {
@@ -30,7 +38,8 @@ export async function loader({ params }: LoaderFunctionArgs) {
         assignedTo: {
           select: {
             id: true,
-            name: true
+            name: true,
+            position: true
           }
         },
         feedback: {
@@ -51,178 +60,221 @@ export async function loader({ params }: LoaderFunctionArgs) {
       throw new Response("Ticket not found", { status: 404 });
     }
 
-    // Check if ticket is resolved or closed
-    const canProvideFeedback = ['RESOLVED', 'CLOSED'].includes(ticket.status);
+    // Only allow feedback for resolved or closed tickets
+    if (!['RESOLVED', 'CLOSED'].includes(ticket.status)) {
+      throw new Response("Feedback can only be provided for resolved or closed tickets", { status: 400 });
+    }
 
-    return json({ 
-      ticket: {
-        id: ticket.id,
-        title: ticket.title,
-        status: ticket.status,
-        customer: ticket.customer,
-        assignedTo: ticket.assignedTo,
-        feedback: ticket.feedback ? {
-          id: ticket.feedback.id,
-          rating: ticket.feedback.rating,
-          comment: ticket.feedback.comment,
-          createdAt: ticket.feedback.createdAt.toISOString(),
-          customer: ticket.feedback.customer,
-          ticket: {
-            id: ticket.id,
-            title: ticket.title,
-            assignedTo: ticket.assignedTo
-          }
-        } : null
-      },
-      canProvideFeedback
-    });
-
+    return json({ ticket });
   } catch (error) {
     console.error("Error loading ticket for feedback:", error);
     throw new Response("Failed to load ticket", { status: 500 });
   }
 }
 
-export default function PublicFeedbackPage() {
-  const { ticket, canProvideFeedback } = useLoaderData<typeof loader>();
+export async function action({ request, params }: ActionFunctionArgs) {
+  const ticketId = params.ticketId;
+  if (!ticketId) {
+    return json({ error: "Ticket ID is required" }, { status: 400 });
+  }
+
+  try {
+    const formData = await request.formData();
+    const data = Object.fromEntries(formData);
+    
+    const validation = feedbackSchema.safeParse(data);
+    if (!validation.success) {
+      return json({ 
+        error: "Invalid data", 
+        errors: validation.error.flatten().fieldErrors 
+      }, { status: 400 });
+    }
+
+    const { rating, comment } = validation.data;
+
+    // Check if ticket exists and is resolved/closed
+    const ticket = await db.ticket.findUnique({
+      where: { id: ticketId },
+      include: {
+        customer: true,
+        assignedTo: true,
+        feedback: true
+      }
+    });
+
+    if (!ticket) {
+      return json({ error: "Ticket not found" }, { status: 404 });
+    }
+
+    if (!['RESOLVED', 'CLOSED'].includes(ticket.status)) {
+      return json({ error: "Feedback can only be provided for resolved or closed tickets" }, { status: 400 });
+    }
+
+    if (ticket.feedback) {
+      return json({ error: "Feedback has already been provided for this ticket" }, { status: 400 });
+    }
+
+    // Start transaction
+    await db.$transaction(async (tx) => {
+      // Create feedback
+      await tx.ticketFeedback.create({
+        data: {
+          ticketId,
+          customerId: ticket.customerId,
+          rating,
+          comment: comment || null
+        }
+      });
+
+      // Update employee performance metrics if ticket was assigned
+      if (ticket.assignedToId) {
+        const performance = await tx.employeePerformance.findUnique({
+          where: { employeeId: ticket.assignedToId }
+        });
+
+        if (performance) {
+          // Calculate new average rating
+          const totalFeedbacks = await tx.ticketFeedback.count({
+            where: {
+              ticket: {
+                assignedToId: ticket.assignedToId
+              }
+            }
+          });
+
+          const newAverage = ((performance.customerRating.toNumber() * (totalFeedbacks - 1)) + rating) / totalFeedbacks;
+
+          await tx.employeePerformance.update({
+            where: { employeeId: ticket.assignedToId },
+            data: {
+              customerRating: newAverage,
+              lastUpdated: new Date()
+            }
+          });
+        } else {
+          // Create performance record if doesn't exist
+          await tx.employeePerformance.create({
+            data: {
+              employeeId: ticket.assignedToId,
+              customerRating: rating
+            }
+          });
+        }
+      }
+    });
+
+    return redirect(`/feedback/${ticketId}?success=true`);
+
+  } catch (error) {
+    console.error("Error submitting feedback:", error);
+    return json({ error: "Failed to submit feedback" }, { status: 500 });
+  }
+}
+
+export default function FeedbackPage() {
+  const { ticket } = useLoaderData<typeof loader>();
+  const url = new URL(typeof window !== 'undefined' ? window.location.href : 'http://localhost');
+  const success = url.searchParams.get('success') === 'true';
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'RESOLVED': return 'bg-green-100 text-green-800';
+      case 'CLOSED': return 'bg-gray-100 text-gray-800';
+      default: return 'bg-blue-100 text-blue-800';
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-4xl mx-auto px-4 py-6">
-          <div className="flex items-center space-x-3">
-            <div className="p-2 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl">
-              <Wifi className="h-6 w-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">
-                ISP Management System
-              </h1>
-              <p className="text-gray-600">Customer Feedback</p>
-            </div>
+    <div className="min-h-screen bg-gray-50 py-12">
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
+            <MessageSquare className="h-8 w-8 text-blue-600" />
           </div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            Service Feedback
+          </h1>
+          <p className="text-gray-600">
+            Help us improve our service by sharing your experience
+          </p>
         </div>
-      </header>
 
-      <PageContainer className="py-8 max-w-4xl">
-        <div className="space-y-6">
-          {/* Ticket Info */}
-          <div className="bg-white rounded-lg border p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">
-              Informasi Tiket
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Ticket Info */}
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <TicketIcon className="mr-2 h-5 w-5" />
+              Ticket Information
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <h3 className="font-medium text-gray-900">{ticket.title}</h3>
+              <p className="text-sm text-gray-600 mt-1">
+                Ticket ID: {ticket.id.slice(-8).toUpperCase()}
+              </p>
+            </div>
+            
+            <div className="flex items-center justify-between">
               <div>
-                <label className="text-sm font-medium text-gray-500">ID Tiket</label>
-                <p className="font-mono text-sm bg-gray-100 px-2 py-1 rounded">
-                  {ticket.id.slice(-8).toUpperCase()}
-                </p>
+                <p className="text-sm text-gray-600">Status</p>
+                <Badge className={getStatusColor(ticket.status)}>
+                  {ticket.status.replace('_', ' ')}
+                </Badge>
               </div>
-              <div>
-                <label className="text-sm font-medium text-gray-500">Status</label>
-                <p className="text-sm">
-                  <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                    ticket.status === 'RESOLVED' 
-                      ? 'bg-green-100 text-green-700'
-                      : ticket.status === 'CLOSED'
-                      ? 'bg-gray-100 text-gray-700'
-                      : 'bg-blue-100 text-blue-700'
-                  }`}>
-                    {ticket.status}
-                  </span>
-                </p>
-              </div>
-              <div className="md:col-span-2">
-                <label className="text-sm font-medium text-gray-500">Judul Tiket</label>
-                <p className="text-gray-900">{ticket.title}</p>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-500">Pelanggan</label>
-                <p className="text-gray-900">{ticket.customer.name}</p>
-              </div>
+              
               {ticket.assignedTo && (
-                <div>
-                  <label className="text-sm font-medium text-gray-500">Ditangani oleh</label>
-                  <p className="text-gray-900">{ticket.assignedTo.name}</p>
+                <div className="text-right">
+                  <p className="text-sm text-gray-600">Handled by</p>
+                  <p className="font-medium">{ticket.assignedTo.name}</p>
+                  {ticket.assignedTo.position && (
+                    <p className="text-sm text-gray-500">{ticket.assignedTo.position}</p>
+                  )}
                 </div>
               )}
             </div>
-          </div>
+          </CardContent>
+        </Card>
 
-          {/* Feedback Section */}
-          {ticket.feedback ? (
-            // Show existing feedback
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                Feedback Anda
+        {/* Feedback Form or Success Message */}
+        {success || ticket.feedback ? (
+          <Card>
+            <CardContent className="text-center py-12">
+              <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                Thank You!
               </h2>
-              <FeedbackDisplay
-                feedback={{
-                  ...ticket.feedback,
-                  customer: {
-                    id: ticket.feedback.customer.id,
-                    name: ticket.feedback.customer.name,
-                    email: ticket.feedback.customer.email || undefined
-                  },
-                  ticket: {
-                    id: ticket.feedback.ticket.id,
-                    title: ticket.feedback.ticket.title,
-                    assignedTo: ticket.feedback.ticket.assignedTo || undefined
-                  }
-                }}
-                showTicketInfo={false}
-                showCustomerInfo={false}
-              />
-            </div>
-          ) : canProvideFeedback ? (
-            // Show feedback form
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                Berikan Feedback
-              </h2>
-              <FeedbackForm
-                ticketId={ticket.id}
-                ticketTitle={ticket.title}
-                customerName={ticket.customer.name}
-                technicianName={ticket.assignedTo?.name}
-              />
-            </div>
-          ) : (
-            // Show message that feedback is not available yet
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                Feedback hanya dapat diberikan setelah tiket diselesaikan atau ditutup.
-                Status tiket saat ini: <strong>{ticket.status}</strong>
-              </AlertDescription>
-            </Alert>
-          )}
+              <p className="text-gray-600 mb-6">
+                Your feedback has been submitted successfully. We appreciate you taking the time to help us improve our service.
+              </p>
+              
+              {ticket.feedback && (
+                <div className="mt-8">
+                  <FeedbackDisplay 
+                    feedback={ticket.feedback}
+                    showTicketInfo={false}
+                  />
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ) : (
+          <FeedbackForm
+            ticketId={ticket.id}
+            ticketTitle={ticket.title}
+            technicianName={ticket.assignedTo?.name}
+            onSubmitSuccess={() => {
+              window.location.href = `/feedback/${ticket.id}?success=true`;
+            }}
+          />
+        )}
 
-          {/* Thank you message */}
-          {ticket.feedback && (
-            <Alert className="border-green-200 bg-green-50">
-              <CheckCircle className="h-4 w-4 text-green-600" />
-              <AlertDescription className="text-green-700">
-                Terima kasih telah memberikan feedback! Masukan Anda sangat berharga 
-                untuk meningkatkan kualitas layanan kami.
-              </AlertDescription>
-            </Alert>
-          )}
+        {/* Footer */}
+        <div className="text-center mt-8 text-sm text-gray-500">
+          <p>This feedback form is secure and your information is protected.</p>
         </div>
-      </PageContainer>
-
-      {/* Footer */}
-      <footer className="bg-white border-t mt-12">
-        <div className="max-w-4xl mx-auto px-4 py-6">
-          <div className="text-center text-sm text-gray-500">
-            <p>&copy; 2024 ISP Management System. All rights reserved.</p>
-            <p className="mt-1">
-              Jika Anda memiliki pertanyaan, silakan hubungi customer service kami.
-            </p>
-          </div>
-        </div>
-      </footer>
+      </div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
 import { json, redirect } from "@remix-run/node";
-import { useLoaderData, useActionData, Form, useNavigation } from "@remix-run/react";
+import { useLoaderData, useActionData, Form, useNavigation, Link } from "@remix-run/react";
+import { z } from "zod";
 import { requireAuth } from "~/lib/auth.server";
 import { requirePermission } from "~/lib/route-protection.server";
 import { Button } from "~/components/ui/button";
@@ -11,23 +12,32 @@ import { PageContainer } from "~/components/layout/page-container";
 import { PageHeader } from "~/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { ArrowLeft, Save, CreditCard } from "lucide-react";
-import { Link } from "@remix-run/react";
 import { db } from "~/lib/db.server";
-import { PaymentStatus } from "@prisma/client";
+
+const createPaymentSchema = z.object({
+  customerId: z.string().min(1, "Customer is required"),
+  amount: z.coerce.number().positive("Amount must be positive"),
+  paymentDate: z.string().min(1, "Payment date is required"),
+  status: z.enum(['PAID', 'PENDING', 'OVERDUE']).default('PENDING')
+});
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const user = await requireAuth(request);
-  requirePermission(user, "payments", "create");
+  requirePermission(user, "customers", "create");
 
-  // Get active customers for selection
   const customers = await db.customer.findMany({
-    where: { status: "ACTIVE" },
-    include: {
+    where: { status: 'ACTIVE' },
+    select: { 
+      id: true, 
+      name: true,
       package: {
-        select: { name: true, price: true, duration: true }
+        select: {
+          name: true,
+          price: true
+        }
       }
     },
-    orderBy: { name: "asc" }
+    orderBy: { name: 'asc' }
   });
 
   return json({ user, customers });
@@ -35,213 +45,182 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
 export async function action({ request }: ActionFunctionArgs) {
   const user = await requireAuth(request);
-  requirePermission(user, "payments", "create");
-
-  const formData = await request.formData();
-  const customerId = formData.get("customerId")?.toString();
-  const amountString = formData.get("amount")?.toString();
-  const paymentDateString = formData.get("paymentDate")?.toString();
-  const statusString = formData.get("status")?.toString();
-
-  // Validation
-  const errors: Record<string, string> = {};
-  
-  if (!customerId) {
-    errors.customerId = "Pelanggan wajib dipilih";
-  }
-
-  if (!amountString) {
-    errors.amount = "Jumlah pembayaran wajib diisi";
-  } else {
-    const amount = parseFloat(amountString);
-    if (isNaN(amount) || amount <= 0) {
-      errors.amount = "Jumlah pembayaran harus berupa angka positif";
-    }
-  }
-
-  if (!paymentDateString) {
-    errors.paymentDate = "Tanggal pembayaran wajib diisi";
-  }
-
-  if (!statusString) {
-    errors.status = "Status pembayaran wajib dipilih";
-  }
-
-  if (Object.keys(errors).length > 0) {
-    return json({ errors }, { status: 400 });
-  }
+  requirePermission(user, "customers", "create");
 
   try {
-    const amount = parseFloat(amountString!);
-    const paymentDate = new Date(paymentDateString!);
-    const status = statusString as PaymentStatus;
+    const formData = await request.formData();
+    const data = Object.fromEntries(formData);
+    
+    const validation = createPaymentSchema.safeParse(data);
+    if (!validation.success) {
+      return json({ 
+        error: "Invalid data", 
+        errors: validation.error.flatten().fieldErrors 
+      }, { status: 400 });
+    }
 
-    const payment = await db.payment.create({
-      data: {
-        customerId: customerId!,
-        amount,
-        paymentDate,
-        status,
-      },
+    const { customerId, amount, paymentDate, status } = validation.data;
+
+    // Verify customer exists
+    const customer = await db.customer.findUnique({
+      where: { id: customerId }
     });
 
-    return redirect(`/payments/${payment.id}`);
+    if (!customer) {
+      return json({ error: "Customer not found" }, { status: 404 });
+    }
+
+    await db.payment.create({
+      data: {
+        customerId,
+        amount,
+        paymentDate: new Date(paymentDate),
+        status
+      }
+    });
+
+    return redirect("/payments");
+
   } catch (error) {
     console.error("Error creating payment:", error);
-    return json({ errors: { general: "Terjadi kesalahan saat menyimpan data" } }, { status: 500 });
+    return json({ error: "Failed to create payment" }, { status: 500 });
   }
 }
 
 export default function NewPayment() {
-  const { user, customers } = useLoaderData<typeof loader>();
-  const actionData = useActionData<typeof action>() as { errors?: Record<string, string> } | undefined;
+  const { customers } = useLoaderData<typeof loader>();
+  const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
-  
+
   const isSubmitting = navigation.state === "submitting";
 
   return (
     <PageContainer className="py-8">
       <PageHeader
-        title="Catat Pembayaran Baru"
-        description="Tambahkan catatan pembayaran pelanggan"
+        title="Add New Payment"
+        description="Record a new customer payment"
       >
         <Button variant="outline" asChild>
           <Link to="/payments">
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Kembali
+            Back to Payments
           </Link>
         </Button>
       </PageHeader>
 
-      <Card className="max-w-2xl">
-        <CardHeader>
-          <CardTitle className="flex items-center">
-            <CreditCard className="mr-2 h-5 w-5" />
-            Informasi Pembayaran
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Form method="post" className="space-y-6">
-            {actionData?.errors?.general && (
-              <div className="bg-red-50 border border-red-200 rounded-md p-4">
-                <p className="text-red-800 text-sm">{actionData.errors.general}</p>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <Label htmlFor="customerId">Pelanggan *</Label>
-              <Select name="customerId" required>
-                <SelectTrigger className={actionData?.errors?.customerId ? "border-red-500" : ""}>
-                  <SelectValue placeholder="Pilih pelanggan" />
-                </SelectTrigger>
-                <SelectContent>
-                  {customers.map((customer) => (
-                    <SelectItem key={customer.id} value={customer.id}>
-                      <div className="flex flex-col">
-                        <span className="font-medium">{customer.name}</span>
-                        <span className="text-sm text-gray-500">
-                          {customer.email} • {customer.package?.name || 'Tidak ada paket'}
-                          {customer.package && (
-                            <span className="ml-2 text-green-600">
-                              (Rp {Number(customer.package.price).toLocaleString('id-ID')})
-                            </span>
-                          )}
-                        </span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {actionData?.errors?.customerId && (
-                <p className="text-red-500 text-sm">{actionData.errors.customerId}</p>
+      <div className="max-w-2xl mx-auto">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <CreditCard className="mr-2 h-5 w-5" />
+              Payment Information
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Form method="post" className="space-y-6">
+              {actionData?.error && (
+                <div className="bg-red-50 border border-red-200 rounded-md p-4">
+                  <div className="text-sm text-red-600">{actionData.error}</div>
+                </div>
               )}
-            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="amount">Jumlah Pembayaran *</Label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">Rp</span>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="customerId">Customer *</Label>
+                  <Select name="customerId" required>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select customer" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {customers.map((customer) => (
+                        <SelectItem key={customer.id} value={customer.id}>
+                          <div>
+                            <div className="font-medium">{customer.name}</div>
+                            {customer.package && (
+                              <div className="text-sm text-gray-500">
+                                {customer.package.name} - Rp {customer.package.price.toLocaleString()}
+                              </div>
+                            )}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {actionData?.errors?.customerId && (
+                    <p className="text-sm text-red-600">{actionData.errors.customerId[0]}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="amount">Amount (IDR) *</Label>
                   <Input
                     id="amount"
                     name="amount"
                     type="number"
-                    required
+                    step="0.01"
                     min="0"
-                    step="1000"
-                    placeholder="150000"
-                    className={`pl-10 ${actionData?.errors?.amount ? "border-red-500" : ""}`}
+                    placeholder="Enter payment amount"
+                    required
                   />
+                  {actionData?.errors?.amount && (
+                    <p className="text-sm text-red-600">{actionData.errors.amount[0]}</p>
+                  )}
                 </div>
-                {actionData?.errors?.amount && (
-                  <p className="text-red-500 text-sm">{actionData.errors.amount}</p>
-                )}
+
+                <div className="space-y-2">
+                  <Label htmlFor="paymentDate">Payment Date *</Label>
+                  <Input
+                    id="paymentDate"
+                    name="paymentDate"
+                    type="date"
+                    defaultValue={new Date().toISOString().split('T')[0]}
+                    required
+                  />
+                  {actionData?.errors?.paymentDate && (
+                    <p className="text-sm text-red-600">{actionData.errors.paymentDate[0]}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="status">Payment Status</Label>
+                  <Select name="status" defaultValue="PENDING">
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="PAID">Paid</SelectItem>
+                      <SelectItem value="PENDING">Pending</SelectItem>
+                      <SelectItem value="OVERDUE">Overdue</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {actionData?.errors?.status && (
+                    <p className="text-sm text-red-600">{actionData.errors.status[0]}</p>
+                  )}
+                </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="paymentDate">Tanggal Pembayaran *</Label>
-                <Input
-                  id="paymentDate"
-                  name="paymentDate"
-                  type="date"
-                  required
-                  defaultValue={new Date().toISOString().split('T')[0]}
-                  className={actionData?.errors?.paymentDate ? "border-red-500" : ""}
-                />
-                {actionData?.errors?.paymentDate && (
-                  <p className="text-red-500 text-sm">{actionData.errors.paymentDate}</p>
-                )}
+              <div className="flex items-center justify-end space-x-4 pt-6">
+                <Button type="button" variant="outline" asChild>
+                  <Link to="/payments">Cancel</Link>
+                </Button>
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="mr-2 h-4 w-4" />
+                      Create Payment
+                    </>
+                  )}
+                </Button>
               </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="status">Status Pembayaran *</Label>
-              <Select name="status" required defaultValue="PAID">
-                <SelectTrigger className={actionData?.errors?.status ? "border-red-500" : ""}>
-                  <SelectValue placeholder="Pilih status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="PAID">Lunas</SelectItem>
-                  <SelectItem value="PENDING">Pending</SelectItem>
-                  <SelectItem value="OVERDUE">Terlambat</SelectItem>
-                </SelectContent>
-              </Select>
-              {actionData?.errors?.status && (
-                <p className="text-red-500 text-sm">{actionData.errors.status}</p>
-              )}
-            </div>
-
-            <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
-              <h4 className="font-medium text-blue-800 mb-2">Tips Pencatatan Pembayaran:</h4>
-              <ul className="text-sm text-blue-700 space-y-1">
-                <li>• Pastikan jumlah pembayaran sesuai dengan tagihan pelanggan</li>
-                <li>• Gunakan status "Lunas" untuk pembayaran yang sudah dikonfirmasi</li>
-                <li>• Gunakan status "Pending" untuk pembayaran yang belum dikonfirmasi</li>
-                <li>• Gunakan status "Terlambat" untuk pembayaran yang melewati jatuh tempo</li>
-              </ul>
-            </div>
-
-            <div className="flex justify-end space-x-3 pt-6">
-              <Button type="button" variant="outline" asChild>
-                <Link to="/payments">Batal</Link>
-              </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Menyimpan...
-                  </>
-                ) : (
-                  <>
-                    <Save className="mr-2 h-4 w-4" />
-                    Simpan
-                  </>
-                )}
-              </Button>
-            </div>
-          </Form>
-        </CardContent>
-      </Card>
+            </Form>
+          </CardContent>
+        </Card>
+      </div>
     </PageContainer>
   );
 }

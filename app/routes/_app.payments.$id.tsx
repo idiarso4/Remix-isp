@@ -9,12 +9,14 @@ import { Badge } from "~/components/ui/badge";
 import { PageContainer } from "~/components/layout/page-container";
 import { PageHeader } from "~/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
-import { ArrowLeft, Edit, CreditCard, User, Calendar, DollarSign, Package, Printer } from "lucide-react";
+import { ArrowLeft, Edit, CreditCard, User, Calendar, DollarSign, CheckCircle, Clock, AlertTriangle, Printer } from "lucide-react";
 import { db } from "~/lib/db.server";
+import { format } from "date-fns";
+import { id } from "date-fns/locale";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
   const user = await requireAuth(request);
-  requirePermission(user, "payments", "read");
+  requirePermission(user, "customers", "read");
 
   const paymentId = params.id;
   if (!paymentId) {
@@ -25,9 +27,19 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     where: { id: paymentId },
     include: {
       customer: {
-        include: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          address: true,
           package: {
-            select: { name: true, speed: true, price: true, duration: true }
+            select: {
+              name: true,
+              price: true,
+              speed: true,
+              duration: true
+            }
           }
         }
       }
@@ -44,6 +56,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 export default function PaymentDetail() {
   const { user, payment } = useLoaderData<typeof loader>();
 
+  // Status badge variant
   const getStatusVariant = (status: string) => {
     switch (status) {
       case 'PAID': return 'default';
@@ -53,39 +66,48 @@ export default function PaymentDetail() {
     }
   };
 
-  const getStatusText = (status: string) => {
+  // Status icon
+  const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'PAID': return 'Lunas';
-      case 'PENDING': return 'Pending';
-      case 'OVERDUE': return 'Terlambat';
-      default: return status;
+      case 'PAID': return <CheckCircle className="h-5 w-5" />;
+      case 'PENDING': return <Clock className="h-5 w-5" />;
+      case 'OVERDUE': return <AlertTriangle className="h-5 w-5" />;
+      default: return <CreditCard className="h-5 w-5" />;
     }
+  };
+
+  // Format currency
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('id-ID', {
+      style: 'currency',
+      currency: 'IDR'
+    }).format(amount);
   };
 
   return (
     <PageContainer className="py-8">
       <PageHeader
-        title={`Pembayaran ${payment.customer.name}`}
-        description={`ID: ${payment.id.slice(-8).toUpperCase()}`}
+        title="Payment Details"
+        description={`Payment information for ${payment.customer.name}`}
       >
         <div className="flex items-center space-x-3">
           <Button variant="outline" onClick={() => window.print()} className="print:hidden">
             <Printer className="mr-2 h-4 w-4" />
-            Cetak
+            Print
           </Button>
-          
+
           <Button variant="outline" asChild>
             <Link to="/payments">
               <ArrowLeft className="mr-2 h-4 w-4" />
-              Kembali
+              Back to Payments
             </Link>
           </Button>
-          
-          <PermissionGate user={user} resource="payments" action="update">
+
+          <PermissionGate user={user} resource="customers" action="update">
             <Button asChild>
               <Link to={`/payments/${payment.id}/edit`}>
                 <Edit className="mr-2 h-4 w-4" />
-                Edit
+                Edit Payment
               </Link>
             </Button>
           </PermissionGate>
@@ -93,124 +115,81 @@ export default function PaymentDetail() {
       </PageHeader>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Content */}
+        {/* Payment Information */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Payment Information */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center">
                 <CreditCard className="mr-2 h-5 w-5" />
-                Detail Pembayaran
+                Payment Information
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="text-sm font-medium text-gray-500">Jumlah Pembayaran</label>
-                  <p className="flex items-center text-2xl font-bold text-green-600">
-                    <DollarSign className="mr-1 h-6 w-6" />
-                    Rp {Number(payment.amount).toLocaleString('id-ID')}
-                  </p>
+                  <label className="text-sm font-medium text-gray-500">Payment ID</label>
+                  <p className="text-lg font-mono">{payment.id}</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-500">Status</label>
                   <div className="mt-1">
-                    <Badge variant={getStatusVariant(payment.status)} className="text-base px-3 py-1">
-                      {getStatusText(payment.status)}
+                    <Badge variant={getStatusVariant(payment.status)} className="flex items-center w-fit">
+                      {getStatusIcon(payment.status)}
+                      <span className="ml-2">{payment.status}</span>
                     </Badge>
                   </div>
                 </div>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium text-gray-500">Tanggal Pembayaran</label>
-                  <p className="flex items-center">
-                    <Calendar className="mr-2 h-4 w-4 text-gray-400" />
-                    {new Date(payment.paymentDate).toLocaleDateString('id-ID', {
-                      weekday: 'long',
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric'
-                    })}
+                  <label className="text-sm font-medium text-gray-500">Amount</label>
+                  <p className="text-2xl font-bold text-green-600">
+                    {formatCurrency(Number(payment.amount))}
                   </p>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-500">Dicatat Pada</label>
-                  <p className="flex items-center">
+                  <label className="text-sm font-medium text-gray-500">Payment Date</label>
+                  <p className="flex items-center text-lg">
                     <Calendar className="mr-2 h-4 w-4 text-gray-400" />
-                    {new Date(payment.createdAt).toLocaleDateString('id-ID', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric'
-                    })}
+                    {format(new Date(payment.paymentDate), "dd MMMM yyyy", { locale: id })}
                   </p>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Payment Receipt */}
+          {/* Customer Information */}
           <Card>
             <CardHeader>
-              <CardTitle>Kwitansi Pembayaran</CardTitle>
+              <CardTitle className="flex items-center">
+                <User className="mr-2 h-5 w-5" />
+                Customer Information
+              </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="border-2 border-dashed border-gray-300 p-6 rounded-lg bg-gray-50">
-                <div className="text-center mb-6">
-                  <h2 className="text-2xl font-bold text-gray-800">KWITANSI PEMBAYARAN</h2>
-                  <p className="text-sm text-gray-600">ISP Management System</p>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-gray-500">Customer Name</label>
+                  <p className="text-lg font-semibold">{payment.customer.name}</p>
                 </div>
-                
-                <div className="grid grid-cols-2 gap-4 mb-6">
-                  <div>
-                    <p className="text-sm text-gray-600">Telah terima dari:</p>
-                    <p className="font-semibold">{payment.customer.name}</p>
-                    {payment.customer.email && (
-                      <p className="text-sm text-gray-600">{payment.customer.email}</p>
-                    )}
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm text-gray-600">No. Kwitansi:</p>
-                    <p className="font-mono font-semibold">{payment.id.slice(-8).toUpperCase()}</p>
-                    <p className="text-sm text-gray-600">
-                      {new Date(payment.paymentDate).toLocaleDateString('id-ID')}
-                    </p>
-                  </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-500">Email</label>
+                  <p>{payment.customer.email || "No email"}</p>
                 </div>
-                
-                <div className="border-t border-gray-300 pt-4 mb-4">
-                  <p className="text-sm text-gray-600 mb-2">Untuk pembayaran:</p>
-                  {payment.customer.package ? (
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <p className="font-semibold">{payment.customer.package.name}</p>
-                        <p className="text-sm text-gray-600">
-                          {payment.customer.package.speed} - {payment.customer.package.duration === 'MONTHLY' ? 'Bulanan' : 'Tahunan'}
-                        </p>
-                      </div>
-                      <p className="font-semibold">Rp {Number(payment.amount).toLocaleString('id-ID')}</p>
-                    </div>
-                  ) : (
-                    <div className="flex justify-between items-center">
-                      <p>Pembayaran Layanan Internet</p>
-                      <p className="font-semibold">Rp {Number(payment.amount).toLocaleString('id-ID')}</p>
-                    </div>
-                  )}
+                <div>
+                  <label className="text-sm font-medium text-gray-500">Phone</label>
+                  <p>{payment.customer.phone || "No phone"}</p>
                 </div>
-                
-                <div className="border-t border-gray-300 pt-4">
-                  <div className="flex justify-between items-center text-lg font-bold">
-                    <p>TOTAL:</p>
-                    <p>Rp {Number(payment.amount).toLocaleString('id-ID')}</p>
-                  </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-500">Address</label>
+                  <p>{payment.customer.address || "No address"}</p>
                 </div>
-                
-                <div className="mt-6 text-center">
-                  <p className="text-xs text-gray-500">
-                    Kwitansi ini sah tanpa tanda tangan dan stempel
-                  </p>
-                </div>
+              </div>
+
+              <div className="pt-4">
+                <Button variant="outline" asChild>
+                  <Link to={`/customers/${payment.customer.id}`}>
+                    View Customer Details
+                  </Link>
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -218,75 +197,29 @@ export default function PaymentDetail() {
 
         {/* Sidebar */}
         <div className="space-y-6">
-          {/* Customer Information */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <User className="mr-2 h-5 w-5" />
-                Informasi Pelanggan
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div>
-                <p className="font-semibold text-lg">{payment.customer.name}</p>
-                <Button variant="link" className="p-0 h-auto" asChild>
-                  <Link to={`/customers/${payment.customer.id}`}>
-                    Lihat Detail Pelanggan
-                  </Link>
-                </Button>
-              </div>
-              
-              {payment.customer.email && (
-                <div>
-                  <label className="text-sm font-medium text-gray-500">Email</label>
-                  <p>{payment.customer.email}</p>
-                </div>
-              )}
-              
-              {payment.customer.phone && (
-                <div>
-                  <label className="text-sm font-medium text-gray-500">Telepon</label>
-                  <p>{payment.customer.phone}</p>
-                </div>
-              )}
-              
-              {payment.customer.location && (
-                <div>
-                  <label className="text-sm font-medium text-gray-500">Lokasi</label>
-                  <p>{payment.customer.location}</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
           {/* Package Information */}
           {payment.customer.package && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
-                  <Package className="mr-2 h-5 w-5" />
-                  Paket Langganan
+                  <DollarSign className="mr-2 h-5 w-5" />
+                  Package Information
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <div>
-                  <p className="font-semibold text-lg">{payment.customer.package.name}</p>
-                  <p className="text-sm text-gray-500">{payment.customer.package.speed}</p>
-                </div>
-                
-                <div>
-                  <p className="text-xl font-bold text-blue-600">
-                    Rp {Number(payment.customer.package.price).toLocaleString('id-ID')}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    per {payment.customer.package.duration === 'MONTHLY' ? 'bulan' : 'tahun'}
-                  </p>
-                </div>
-                
-                <div className="pt-2">
-                  <Badge variant={payment.amount.toString() === payment.customer.package.price.toString() ? 'default' : 'secondary'}>
-                    {payment.amount.toString() === payment.customer.package.price.toString() ? 'Pembayaran Penuh' : 'Pembayaran Parsial'}
-                  </Badge>
+              <CardContent>
+                <div className="space-y-3">
+                  <div>
+                    <p className="font-semibold text-lg">{payment.customer.package.name}</p>
+                    <p className="text-sm text-gray-500">{payment.customer.package.speed}</p>
+                  </div>
+                  <div>
+                    <p className="text-xl font-bold text-blue-600">
+                      {formatCurrency(Number(payment.customer.package.price))}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      per {payment.customer.package.duration === 'MONTHLY' ? 'month' : 'year'}
+                    </p>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -295,32 +228,61 @@ export default function PaymentDetail() {
           {/* Payment Summary */}
           <Card>
             <CardHeader>
-              <CardTitle>Ringkasan</CardTitle>
+              <CardTitle>Payment Summary</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="flex justify-between">
-                <span className="text-sm text-gray-500">ID Pembayaran</span>
-                <span className="font-mono text-sm">{payment.id.slice(-8).toUpperCase()}</span>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-600">Payment Amount:</span>
+                <span className="font-semibold">{formatCurrency(Number(payment.amount))}</span>
               </div>
-              
-              <div className="flex justify-between">
-                <span className="text-sm text-gray-500">Metode</span>
-                <span className="text-sm">Transfer Bank</span>
-              </div>
-              
-              <div className="flex justify-between">
-                <span className="text-sm text-gray-500">Periode</span>
-                <span className="text-sm">
-                  {new Date(payment.paymentDate).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}
+              <div className="flex justify-between items-center">
+                <span className="text-gray-600">Payment Date:</span>
+                <span className="font-semibold">
+                  {format(new Date(payment.paymentDate), "dd MMM yyyy", { locale: id })}
                 </span>
               </div>
-              
-              <div className="border-t pt-3">
-                <div className="flex justify-between font-semibold">
-                  <span>Total</span>
-                  <span>Rp {Number(payment.amount).toLocaleString('id-ID')}</span>
-                </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-600">Status:</span>
+                <Badge variant={getStatusVariant(payment.status)}>
+                  {payment.status}
+                </Badge>
               </div>
+              <hr className="my-3" />
+              <div className="flex justify-between items-center text-lg font-bold">
+                <span>Total:</span>
+                <span className="text-green-600">{formatCurrency(Number(payment.amount))}</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Quick Actions */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Quick Actions</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <PermissionGate user={user} resource="customers" action="update">
+                <Button className="w-full" asChild>
+                  <Link to={`/payments/${payment.id}/edit`}>
+                    <Edit className="mr-2 h-4 w-4" />
+                    Edit Payment
+                  </Link>
+                </Button>
+              </PermissionGate>
+
+              <Button variant="outline" className="w-full" asChild>
+                <Link to={`/customers/${payment.customer.id}`}>
+                  <User className="mr-2 h-4 w-4" />
+                  View Customer
+                </Link>
+              </Button>
+
+              <Button variant="outline" className="w-full" asChild>
+                <Link to="/payments">
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  All Payments
+                </Link>
+              </Button>
             </CardContent>
           </Card>
         </div>
