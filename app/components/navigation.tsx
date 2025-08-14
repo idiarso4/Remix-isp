@@ -82,7 +82,7 @@ const navigationItems = [
     name: "Feedback",
     href: "/feedback",
     icon: MessageSquare,
-    resource: "tickets",
+    resource: "feedback",
     action: "read" as const,
   },
   {
@@ -259,17 +259,17 @@ export function Navigation({ user }: NavigationProps) {
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>
-                  <LogoutDialog 
-                    user={user}
-                    trigger={
-                      <button className="flex items-center w-full text-red-600 px-2 py-1.5 text-sm rounded hover:bg-red-50">
+                <LogoutDialog
+                  user={user}
+                  trigger={
+                    <DropdownMenuItem>
+                      <div className="flex items-center w-full text-red-600">
                         <LogOut className="mr-2 h-4 w-4" />
                         <span>Keluar</span>
-                      </button>
-                    }
-                  />
-                </DropdownMenuItem>
+                      </div>
+                    </DropdownMenuItem>
+                  }
+                />
               </DropdownMenuContent>
             </DropdownMenu>
 
@@ -292,6 +292,11 @@ export function Navigation({ user }: NavigationProps) {
         {/* Mobile Navigation */}
         {isMobileMenuOpen && (
           <div className="md:hidden border-t border-gray-200 bg-white">
+            {/* Mobile Search */}
+            <div className="p-2">
+              <GlobalSearch placeholder="Search..." className="w-full" />
+            </div>
+
             <div className="px-2 pt-2 pb-3 space-y-1">
               {filteredNavItems.map((item) => {
                 const Icon = item.icon;
@@ -312,6 +317,26 @@ export function Navigation({ user }: NavigationProps) {
                   </Link>
                 );
               })}
+            </div>
+
+            {/* Mobile user menu items */}
+            <div className="px-2 pt-2 pb-3 border-t border-gray-200">
+              <Link
+                to="/profile"
+                className="flex items-center px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                <User className="h-4 w-4 mr-3" />
+                Profil
+              </Link>
+              <Link
+                to="/settings"
+                className="flex items-center px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                <Settings className="h-4 w-4 mr-3" />
+                Pengaturan
+              </Link>
             </div>
           </div>
         )}

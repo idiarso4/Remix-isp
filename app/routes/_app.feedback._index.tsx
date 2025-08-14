@@ -22,7 +22,7 @@ import { db } from "~/lib/db.server";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const user = await requireAuth(request);
-  requirePermission(user, "tickets", "read");
+  requirePermission(user, "feedback", "read");
 
   const url = new URL(request.url);
   const search = url.searchParams.get("search") || "";
@@ -99,7 +99,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   const feedbackStats = {
     totalFeedbacks: stats._count.rating || 0,
-    averageRating: stats._avg.rating?.toNumber() || 0,
+    averageRating: stats._avg.rating || 0,
     ratingDistribution: ratingDistribution.map(item => ({
       rating: item.rating,
       count: item._count.rating

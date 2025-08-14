@@ -9,6 +9,7 @@ import {
 import type { LinksFunction, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { getUser } from "~/lib/auth.server";
+import { ThemeProvider } from "~/components/providers/theme-provider";
 
 import "./tailwind.css";
 
@@ -40,9 +41,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body>
-        {children}
-        <ScrollRestoration />
-        <Scripts />
+        <ThemeProvider>
+          {children}
+          <ScrollRestoration />
+          <Scripts />
+        </ThemeProvider>
       </body>
     </html>
   );

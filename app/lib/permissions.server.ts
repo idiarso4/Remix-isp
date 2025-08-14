@@ -33,6 +33,9 @@ export const rolePermissions: Record<Role, Permission[]> = {
     { resource: 'ticket-notes', action: 'create', conditions: { assignedTo: 'self' } },
     { resource: 'ticket-notes', action: 'read' },
     
+    // Feedback access
+    { resource: 'feedback', action: 'read' },
+    
     // Employee access (read only for basic info)
     { resource: 'employees', action: 'read' },
     
@@ -61,6 +64,9 @@ export const rolePermissions: Record<Role, Permission[]> = {
     // Reports (marketing focused)
     { resource: 'reports', action: 'read', conditions: { scope: 'marketing' } },
     
+    // Feedback access
+    { resource: 'feedback', action: 'read' },
+    
     // Employee access (read only)
     { resource: 'employees', action: 'read' }
   ],
@@ -82,7 +88,10 @@ export const rolePermissions: Record<Role, Permission[]> = {
     
     // Settings (HR related)
     { resource: 'settings', action: 'read' },
-    { resource: 'settings', action: 'update', conditions: { scope: 'hr' } }
+    { resource: 'settings', action: 'update', conditions: { scope: 'hr' } },
+    
+    // Feedback access
+    { resource: 'feedback', action: 'read' }
   ]
 };
 

@@ -114,7 +114,9 @@ export default function EmployeesIndex() {
       type: 'select',
       options: [
         { value: 'all', label: 'Semua Divisi' },
-        ...divisions.map(div => ({ value: div, label: div }))
+        ...divisions
+          .filter((div): div is string => typeof div === 'string')
+          .map(div => ({ value: div, label: div }))
       ]
     }
   ];
@@ -195,7 +197,9 @@ export default function EmployeesIndex() {
             <>
               <div>{employee.performanceMetrics.totalTicketsResolved} selesai</div>
               <div className="text-gray-500">
-                {employee.performanceMetrics.customerRating.toFixed(1)}/5 ⭐
+                {employee.performanceMetrics.customerRating ? 
+                  `${Number(employee.performanceMetrics.customerRating).toFixed(1)}/5 ⭐` : 
+                  'Belum ada rating'}
               </div>
             </>
           ) : (

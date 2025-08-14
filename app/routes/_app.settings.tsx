@@ -8,7 +8,7 @@ import { Badge } from "~/components/ui/badge";
 import { PageContainer } from "~/components/layout/page-container";
 import { PageHeader } from "~/components/layout/page-header";
 import {
-  Settings,
+  Settings as SettingsIcon,
   User,
   Shield,
   Bell,
@@ -18,6 +18,7 @@ import {
   ExternalLink,
   ChevronRight
 } from "lucide-react";
+import { cn } from "~/lib/utils";
 
 export const meta: MetaFunction = () => {
   return [
@@ -48,14 +49,14 @@ const settingsCategories = [
     title: "Keamanan",
     description: "Pengaturan keamanan dan privasi",
     icon: Shield,
-    href: "#",
+    href: "/settings/security",
     color: "bg-red-500",
     items: [
-      "Riwayat login",
+      "Otentikasi dua faktor",
       "Sesi aktif",
-      "Pengaturan privasi"
+      "Pembatasan akses"
     ],
-    disabled: true
+    disabled: false
   },
   {
     title: "Notifikasi",
@@ -74,14 +75,14 @@ const settingsCategories = [
     title: "Tampilan",
     description: "Kustomisasi tampilan aplikasi",
     icon: Palette,
-    href: "#",
+    href: "/settings/appearance",
     color: "bg-purple-500",
     items: [
-      "Theme preferences",
-      "Language settings",
-      "Layout options"
+      "Tema aplikasi",
+      "Pengaturan bahasa",
+      "Tata letak"
     ],
-    disabled: true
+    disabled: false
   },
   {
     title: "Data & Backup",
@@ -111,7 +112,7 @@ const settingsCategories = [
   }
 ];
 
-export default function Settings() {
+export default function SettingsPage() {
   const { user } = useLoaderData<typeof loader>();
 
   return (
@@ -128,9 +129,10 @@ export default function Settings() {
           return (
             <Card 
               key={category.title} 
-              className={`bg-white/80 backdrop-blur-sm hover:shadow-lg transition-all duration-300 ${
-                category.disabled ? 'opacity-60' : 'hover:-translate-y-1'
-              }`}
+              className={cn(
+                "bg-white/80 backdrop-blur-sm hover:shadow-lg transition-all duration-300",
+                category.disabled ? "opacity-60" : "hover:-translate-y-1"
+              )}
             >
               <CardHeader className="pb-4">
                 <div className="flex items-center justify-between">
@@ -159,13 +161,13 @@ export default function Settings() {
                 <div className="pt-2">
                   {category.disabled ? (
                     <Button variant="outline" className="w-full" disabled>
-                      <Settings className="mr-2 h-4 w-4" />
+                      <SettingsIcon className="mr-2 h-4 w-4" />
                       Segera Hadir
                     </Button>
                   ) : (
                     <Button asChild className="w-full">
                       <Link to={category.href}>
-                        <Settings className="mr-2 h-4 w-4" />
+                        <SettingsIcon className="mr-2 h-4 w-4" />
                         Buka Pengaturan
                         <ChevronRight className="ml-2 h-4 w-4" />
                       </Link>
@@ -180,9 +182,9 @@ export default function Settings() {
 
       {/* System Information */}
       <div className="mt-12">
-        <Card className="bg-white/80 backdrop-blur-sm">
+        <Card className={cn("bg-white/80 backdrop-blur-sm")}>
           <CardHeader>
-            <CardTitle className="flex items-center">
+            <CardTitle className={cn("flex items-center")}>
               <Database className="mr-2 h-5 w-5" />
               Informasi Sistem
             </CardTitle>
@@ -218,7 +220,7 @@ export default function Settings() {
 
       {/* Quick Links */}
       <div className="mt-8">
-        <Card className="bg-white/80 backdrop-blur-sm">
+        <Card className={cn("bg-white/80 backdrop-blur-sm")}>
           <CardHeader>
             <CardTitle>Quick Links</CardTitle>
           </CardHeader>

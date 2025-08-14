@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { cn } from "~/lib/utils";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -10,11 +10,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "~/components/ui/popover";
 import { Search, Filter, X } from "lucide-react";
 
 export interface FilterOption {
@@ -66,20 +61,24 @@ export function SearchFilter({
 
       {/* Filter Button */}
       {filters.length > 0 && (
-        <div className="flex items-center gap-2">
-          <Popover open={isFilterOpen} onOpenChange={setIsFilterOpen}>
-            <PopoverTrigger>
-              <Button variant="outline" className="relative">
-                <Filter className="h-4 w-4 mr-2" />
-                Filter
-                {activeFilterCount > 0 && (
-                  <span className="ml-2 bg-blue-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                    {activeFilterCount}
-                  </span>
-                )}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-80" align="end">
+        <div className="relative">
+          <Button
+            variant="outline"
+            onClick={() => setIsFilterOpen(!isFilterOpen)}
+            className="relative"
+            type="button"
+          >
+            <Filter className="h-4 w-4 mr-2" />
+            Filter
+            {activeFilterCount > 0 && (
+              <span className="ml-2 bg-blue-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                {activeFilterCount}
+              </span>
+            )}
+          </Button>
+
+          {isFilterOpen && (
+            <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border p-4 z-50">
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h4 className="font-medium">Filter</h4>
@@ -142,8 +141,8 @@ export function SearchFilter({
                   </div>
                 ))}
               </div>
-            </PopoverContent>
-          </Popover>
+            </div>
+          )}
         </div>
       )}
     </div>

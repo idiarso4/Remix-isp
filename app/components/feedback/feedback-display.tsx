@@ -14,7 +14,7 @@ interface Feedback {
   id: string;
   rating: number;
   comment: string | null;
-  createdAt: string;
+  createdAt: string | Date;
   customer: {
     id: string;
     name: string;
@@ -23,10 +23,10 @@ interface Feedback {
   ticket?: {
     id: string;
     title: string;
-    assignedTo?: {
+    assignedTo: {
       id: string;
       name: string;
-    };
+    } | null;
   };
 }
 
@@ -121,7 +121,7 @@ export function FeedbackDisplay({
           <div className="flex items-center space-x-1">
             <Calendar className="h-4 w-4" />
             <span>
-              {format(new Date(feedback.createdAt), "dd MMM yyyy", { locale: id })}
+              {format(new Date(feedback.createdAt), "d MMM yyyy", { locale: id })}
             </span>
           </div>
         </div>
